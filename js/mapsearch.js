@@ -163,11 +163,12 @@ async function msSearch() {
     var list = await msKeywordSearch(coord.x, coord.y, msState.radius, msState.keyword);
     msState.results = list.sort(function(a, b) { return a.distance - b.distance; });
     msState.postsCache = {};
+    if (wrap) wrap.innerHTML = '<div class="blog-loading show" style="grid-column:1/-1;"><span class="blog-spinner"></span>학원리스트 조회중...</div>';
+    await msRunBlogChecks();
     if (countEl) {
       countEl.textContent = address + ' 기준, 반경 ' + msRadiusLabel(msState.radius) + ' 이내 "' + msState.keyword + '" ' + msState.results.length + '건';
     }
     msRenderList();
-    msRunBlogChecks();
   } catch (e) {
     msState.results = [];
     var msg = '검색 중 오류가 발생했습니다.';
@@ -192,6 +193,9 @@ function msRenderList() {
   }
   wrap.innerHTML = msState.results.map(function(a, i) {
     var naverUrl = 'https://map.naver.com/p/search/' + encodeURIComponent(a.name + ' ' + (a.address || ''));
+    var noBlog = a.hasBlog === false;
+    var btnLabel = noBlog ? '📋 블로그 없음' : '📋 블로그 취합';
+    var btnAttrs = noBlog ? ' disabled' : ' onclick="msFetchPosts(' + i + ')"';
     return '' +
       '<div class="blog-card">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
@@ -199,7 +203,7 @@ function msRenderList() {
             '<div class="bimg-badge body-img" style="flex-shrink:0;">' + msRadiusLabel(a.distance) + '</div>' +
             '<div style="font-size:14px;font-weight:800;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><a href="' + msEsc(naverUrl) + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;">' + msEsc(a.name) + '</a></div>' +
           '</div>' +
-          '<button class="bc-btn" id="ms-blog-btn-' + i + '" style="flex-shrink:0;" onclick="msFetchPosts(' + i + ')">📋 블로그 취합</button>' +
+          '<button class="bc-btn" id="ms-blog-btn-' + i + '" style="flex-shrink:0;"' + btnAttrs + '>' + btnLabel + '</button>' +
         '</div>' +
         '<div style="font-size:12px;color:var(--mut);margin-top:6px;">' + msEsc(a.address) + '</div>' +
       '</div>';
@@ -241,8 +245,9 @@ async function msRequestAcademyPosts(placeId, cfg) {
   }
 }
 
-// 검색 결과가 뜨자마자 백그라운드로 블로그 보유 여부를 확인해, 없는 학원은 버튼을 비활성화.
-// 실패(네트워크 오류 등)한 경우는 판단 불가로 보고 버튼을 그대로 둔다(오탐으로 기능을 막지 않기 위해).
+// 리스트를 렌더링하기 전에 전체 학원의 블로그 보유 여부를 먼저 확인 — 목록이 뜰 때부터
+// 없는 학원은 바로 비활성화된 상태로 보이게 하기 위함(렌더 후 버튼이 뒤늦게 바뀌는 걸 방지).
+// 실패(네트워크 오류 등)한 경우는 판단 불가로 보고 활성 상태로 둔다(오탐으로 기능을 막지 않기 위해).
 async function msRunBlogChecks() {
   var cfg = (typeof getMapsearchGasConfig === 'function') ? getMapsearchGasConfig() : { url: '', token: '' };
   if (!cfg.url || !cfg.token) return;
@@ -269,10 +274,11 @@ function msDelay(ms) {
   return new Promise(function(resolve) { setTimeout(resolve, ms); });
 }
 
+// 확인 결과를 academy 객체(msState.results[idx])에 직접 기록 — 이 시점엔 아직 리스트를
+// 렌더링하지 않은 상태라 버튼 DOM이 없음. hasBlog는 true/false/undefined(판단 불가) 3가지.
 async function msCheckHasBlog(idx, cfg) {
   var academy = msState.results[idx];
-  var btn = document.getElementById('ms-blog-btn-' + idx);
-  if (!academy || !btn) return;
+  if (!academy) return;
   var placeId = msExtractPlaceId(academy.link);
   if (!placeId) return;
 
@@ -283,10 +289,7 @@ async function msCheckHasBlog(idx, cfg) {
   }
   if (!result.ok) return;
   msState.postsCache[placeId] = result.posts;
-  if (!result.posts.length) {
-    btn.disabled = true;
-    btn.textContent = '📋 블로그 없음';
-  }
+  academy.hasBlog = result.posts.length > 0;
 }
 
 async function msFetchPosts(idx) {
