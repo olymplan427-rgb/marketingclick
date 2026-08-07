@@ -46,13 +46,10 @@ async function newsCallGemini(systemPrompt, userContent, maxTokens) {
   return geminiProxyCall({ model: getModel('gemini'), system: systemPrompt, content: userContent, max_tokens: maxTokens || 3500 });
 }
 
-// Claude(claudeProxy)를 먼저 시도 — 실패하면(과금/한도/오류 등) Gemini 무료 모델 순차 폴백(geminiProxy 쪽에서 처리)으로 넘어간다.
+// 뉴스 소재 정리는 무조건 Gemini만 사용 — Claude는 시도하지 않는다.
+// Gemini 쪽(geminiProxy → GEMINI_MODEL_FALLBACK)이 무료 상위 모델부터 순차적으로 폴백한다.
 async function newsGenerateTopics(systemPrompt, userContent, maxTokens) {
-  try {
-    return await blogCallClaude(systemPrompt, userContent, maxTokens);
-  } catch (claudeErr) {
-    return await newsCallGemini(systemPrompt, userContent, maxTokens);
-  }
+  return newsCallGemini(systemPrompt, userContent, maxTokens);
 }
 
 async function newsSuggestTopics(btn) {
