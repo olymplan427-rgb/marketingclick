@@ -163,7 +163,7 @@ async function msSearch() {
     var list = await msKeywordSearch(coord.x, coord.y, msState.radius, msState.keyword);
     msState.results = list.sort(function(a, b) { return a.distance - b.distance; });
     msState.postsCache = {};
-    if (wrap) wrap.innerHTML = '<div class="blog-loading show" style="grid-column:1/-1;"><span class="blog-spinner"></span>블로그 보유 여부 확인 중...</div>';
+    if (wrap) wrap.innerHTML = '<div class="blog-loading show" style="grid-column:1/-1;"><span class="blog-spinner"></span>학원리스트 조회중...</div>';
     await msRunBlogChecks();
     if (countEl) {
       countEl.textContent = address + ' 기준, 반경 ' + msRadiusLabel(msState.radius) + ' 이내 "' + msState.keyword + '" ' + msState.results.length + '건';
