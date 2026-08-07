@@ -328,6 +328,10 @@ function applyFeatureFlags() {
     var igSec = document.getElementById('ig-post-section');
     if (igSec) igSec.style.display = 'none';
   }
+  if (f.promo === false) {
+    var promoSec = document.getElementById('promo-section');
+    if (promoSec) promoSec.style.display = 'none';
+  }
 }
 
 // ── 모델 선택 ─────────────────────────────────────────────────────
