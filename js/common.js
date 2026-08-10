@@ -171,7 +171,7 @@ function getUserAuth() {
 }
 
 function clearUserAuth() {
-  ['user_id','user_pw','user_name','user_academy','user_role'].forEach(function(k){ localStorage.removeItem(_authKey(k)); });
+  ['user_id','user_pw','user_name','user_academy','user_role','last_active'].forEach(function(k){ localStorage.removeItem(_authKey(k)); });
 }
 
 async function loginSubmit() {
@@ -198,6 +198,7 @@ async function loginSubmit() {
     localStorage.setItem(_authKey('user_name'), json.name || id);
     localStorage.setItem(_authKey('user_academy'), json.academy || '');
     localStorage.setItem(_authKey('user_role'), json.role || '');
+    localStorage.setItem(_authKey('last_active'), String(Date.now()));
     hideLoginOverlay();
   } catch(e) {
     if (errEl) { errEl.textContent = '연결 오류: ' + e.message; errEl.style.display = 'block'; }
@@ -223,9 +224,35 @@ function hideLoginOverlay() {
   if (nameEl && auth) nameEl.textContent = auth.name + (auth.academy ? ' · ' + auth.academy : '');
 }
 function initLoginGate() {
-  if (getUserAuth()) { hideLoginOverlay(); return; }
+  _checkAutoLogout();
+  if (getUserAuth()) { hideLoginOverlay(); _touchActivity(); return; }
   showLoginOverlay();
 }
+
+// ── 8시간 미사용 시 자동 로그아웃 ──────────────────────────────────
+var AUTO_LOGOUT_MS = 8 * 60 * 60 * 1000;
+
+// 활동마다 매번 쓰면 낭비이므로(특히 mousemove), 최소 1분 간격으로만 기록
+function _touchActivity() {
+  if (!getUserAuth()) return;
+  var last = parseInt(localStorage.getItem(_authKey('last_active')), 10) || 0;
+  var now = Date.now();
+  if (now - last < 60000) return;
+  localStorage.setItem(_authKey('last_active'), String(now));
+}
+
+function _checkAutoLogout() {
+  if (!getUserAuth()) return;
+  var last = parseInt(localStorage.getItem(_authKey('last_active')), 10);
+  if (!last) { _touchActivity(); return; }
+  if (Date.now() - last > AUTO_LOGOUT_MS) logoutUser();
+}
+
+['click', 'keydown', 'mousemove', 'scroll', 'touchstart'].forEach(function (evt) {
+  document.addEventListener(evt, _touchActivity, { passive: true });
+});
+// 탭을 열어둔 채 방치한 경우까지 잡기 위해 주기적으로도 확인
+setInterval(_checkAutoLogout, 5 * 60 * 1000);
 
 // ── Claude 프록시 (관리자 키로 서버측 호출 — 클라이언트는 Claude API 키를 절대 갖지 않음) ──
 async function claudeProxyCall(payload) {
