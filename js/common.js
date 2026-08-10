@@ -332,6 +332,10 @@ function applyFeatureFlags() {
     var promoSec = document.getElementById('promo-section');
     if (promoSec) promoSec.style.display = 'none';
   }
+  if (f.accountNote === false) {
+    var accNote = document.getElementById('account-sub-note');
+    if (accNote) accNote.style.display = 'none';
+  }
 }
 
 // ── 모델 선택 ─────────────────────────────────────────────────────
