@@ -21,11 +21,13 @@ const localAssets = [
   'js/blog.js',
   'js/mapsearch.js',
   'js/news.js',
+  'js/feedback.js',
   'js/common.js',
   'pages/image.html',
   'pages/blog.html',
   'pages/monitor.html',
   'pages/mapsearch.html',
+  'pages/feedback.html',
   'pages/settings.html'
 ];
 

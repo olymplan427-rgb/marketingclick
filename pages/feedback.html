@@ -1,0 +1,28 @@
+
+  <!-- PAGE FEEDBACK -->
+  <div class="page" id="page-feedback">
+  <div class="blog-left-wrap">
+    <div class="blog-left">
+      <div class="panel-intro">
+        <div class="panel-intro-title">피드백 / 문의</div>
+        <div class="panel-intro-desc">관리자에게 의견이나 문의를 남길 수 있습니다. 작성한 글은 본인과 관리자만 볼 수 있습니다.</div>
+      </div>
+      <div class="tool-section">
+        <label class="blog-label">새 문의 작성</label>
+        <textarea class="blog-input" id="fb-new-content" rows="4" placeholder="문의하실 내용을 입력하세요" style="min-height:90px;"></textarea>
+        <button class="btn btn-primary" style="margin-top:8px;" onclick="feedbackPost()">등록</button>
+      </div>
+      <div id="fb-alert" class="blog-alert err"></div>
+      <button class="btn btn-outline" style="font-size:12px;padding:6px 14px;margin-bottom:10px;" onclick="feedbackInit()">새로고침</button>
+      <div id="fb-list"></div>
+    </div>
+  </div>
+  <div class="blog-right">
+    <div id="fb-detail">
+      <div class="blog-card">
+        <div style="font-size:13px;font-weight:900;color:var(--txt);margin-bottom:8px;">피드백 / 문의</div>
+        <div style="font-size:12px;color:var(--mut);line-height:1.7;">왼쪽 목록에서 글을 클릭하면<br>여기에 전체 대화가 표시됩니다.</div>
+      </div>
+    </div>
+  </div>
+  </div><!-- /page-feedback -->
