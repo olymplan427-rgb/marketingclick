@@ -116,6 +116,11 @@ function showPage(id) {
     var navMs = document.getElementById('nav-mapsearch');
     if (navMs) navMs.classList.add('active');
     if (typeof msInit === 'function') msInit();
+  } else if (id === 'feedback') {
+    document.getElementById('page-feedback').classList.add('active');
+    var navFb = document.getElementById('nav-feedback');
+    if (navFb) navFb.classList.add('active');
+    if (typeof feedbackInit === 'function') feedbackInit();
   }
 }
 
@@ -336,6 +341,48 @@ async function gasGetMyPosts(n) {
   });
   if (!json.ok) throw new Error(json.error || '히스토리 조회 실패');
   return json.posts || [];
+}
+
+// ── 피드백/문의 (게시판 형태, 스레드별로 본인+관리자만 조회 가능) ─────
+async function gasFeedbackList() {
+  var auth = getUserAuth();
+  if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
+  var cfg = getGasConfig();
+  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  var json = await _fetchGasJson(cfg.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS는 OPTIONS(preflight)를 못 받으므로 simple-request로 보냄
+    body: JSON.stringify({ action: 'feedbackList', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId() })
+  });
+  if (!json.ok) throw new Error(json.error || '문의 목록 조회 실패');
+  return json.threads || [];
+}
+
+async function gasFeedbackPost(content) {
+  var auth = getUserAuth();
+  if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
+  var cfg = getGasConfig();
+  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  var json = await _fetchGasJson(cfg.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS는 OPTIONS(preflight)를 못 받으므로 simple-request로 보냄
+    body: JSON.stringify({ action: 'feedbackPost', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), content: content })
+  });
+  if (!json.ok) throw new Error(json.error || '등록 실패');
+  return json.threadId;
+}
+
+async function gasFeedbackReply(threadId, content) {
+  var auth = getUserAuth();
+  if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
+  var cfg = getGasConfig();
+  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  var json = await _fetchGasJson(cfg.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS는 OPTIONS(preflight)를 못 받으므로 simple-request로 보냄
+    body: JSON.stringify({ action: 'feedbackReply', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), threadId: threadId, content: content })
+  });
+  if (!json.ok) throw new Error(json.error || '답변 등록 실패');
 }
 
 // ── 기능별 on/off (flags.js가 배포 시 window.FEATURE_FLAGS 일부를 덮어씀) ──
