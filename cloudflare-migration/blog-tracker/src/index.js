@@ -71,23 +71,24 @@ async function verifyUser(env, id, password, site) {
 async function recentBlogRows(env) {
   const lastRow = await getSheetRowCount(env, BLOG_SHEET);
   const startRow = Math.max(2, lastRow - RECENT_SCAN_ROWS + 1);
-  return getValues(env, BLOG_SHEET + '!A' + startRow + ':J' + lastRow);
+  return getValues(env, BLOG_SHEET + '!A' + startRow + ':M' + lastRow);
 }
 
+// 컬럼 순서: 날짜(0)~구조(8), 목표분량(9), 섹션가이드(10), 프롬프트버전(11), 작성자(12)
 async function countTodayPosts(env, userId) {
   const rows = await recentBlogRows(env);
   const today = todayKST();
   let count = 0;
   for (const row of rows) {
-    if (rowDateKST(row[0]) === today && String(row[9] || '') === String(userId)) count++;
+    if (rowDateKST(row[0]) === today && String(row[12] || '') === String(userId)) count++;
   }
   return count;
 }
 
 async function getMyPosts(env, userId, n) {
-  const rows = await getValues(env, BLOG_SHEET + '!A2:J');
+  const rows = await getValues(env, BLOG_SHEET + '!A2:M');
   return rows
-    .filter((r) => String(r[9] || '') === String(userId))
+    .filter((r) => String(r[12] || '') === String(userId))
     .reverse()
     .slice(0, Math.min(n || 100, 100))
     .map((r) => ({
@@ -114,8 +115,8 @@ async function savePost(env, data) {
   }
   await appendRow(env, BLOG_SHEET, [
     nowKST(), data.type || '', data.mood || '', data.topic || '', data.keywords || '',
-    data.tags || '', data.title || '', data.body || '', data.structure || '', data.userId || '',
-    data.targetLength || '', data.sectionGuide || '', data.promptVersion || ''
+    data.tags || '', data.title || '', data.body || '', data.structure || '',
+    data.targetLength || '', data.sectionGuide || '', data.promptVersion || '', data.userId || ''
   ]);
   return { ok: true };
 }
