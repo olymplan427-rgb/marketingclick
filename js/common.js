@@ -465,6 +465,9 @@ async function gasSavePost(data) {
     tags:      data.tags      || '',
     body:      data.body      || '',
     structure: data.structure || '',
+    targetLength:  data.targetLength  || '',
+    sectionGuide:  data.sectionGuide  || '',
+    promptVersion: data.promptVersion || '',
     userId:    auth ? auth.id : '',
     userPw:    auth ? auth.pw : '',
     site:      _siteId()
