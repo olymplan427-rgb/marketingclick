@@ -114,7 +114,8 @@ async function savePost(env, data) {
   }
   await appendRow(env, BLOG_SHEET, [
     nowKST(), data.type || '', data.mood || '', data.topic || '', data.keywords || '',
-    data.tags || '', data.title || '', data.body || '', data.structure || '', data.userId || ''
+    data.tags || '', data.title || '', data.body || '', data.structure || '', data.userId || '',
+    data.targetLength || '', data.sectionGuide || '', data.promptVersion || ''
   ]);
   return { ok: true };
 }

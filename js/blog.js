@@ -1,6 +1,10 @@
 var blogState = { draft: null, result: null, step: 1, historyPosts: null, historySelected: -1 };
 // 모델은 설정 페이지의 getModel('claude') 로 동적 참조
 
+// 프롬프트를 고칠 때마다 이 값을 올려서, 시트에 저장된 글이 어떤 프롬프트 버전으로
+// 나왔는지 나중에 추적할 수 있게 함 (분량 지시 등 프롬프트 변경 이력과 실제 결과물 대조용)
+var BLOG_PROMPT_VERSION = 'v6-length-priority-2026-08-06';
+
 // ── 교육청 표시광고 심의 대상 금지어 (감지 시 대체 표현으로 필터링) ──
 // 복합어(선행학습)를 먼저 검사해야 "사전학습학습" 같은 중복 치환을 피할 수 있음 — 순서 중요
 var BLOG_BANNED_WORDS = ['선행학습', '선행', '예비'];
@@ -59,6 +63,10 @@ function getBlogDraftSystem(type) {
     sectionGuide = '섹션 4~6개, 각 summary는 4~6문장이며 구체적 사례·수치·전환 흐름까지 포함해 최종 본문 확장 시 충분한 분량이 나오도록 상세히 작성할 것';
   }
   var lengthGuide = '목표 분량은 ' + targetLen + '자(공백 제외, 최종 결과물 전체 기준)이다. ' + sectionGuide;
+
+  // 저장 시(blogFinalize) 이 값을 시트에 같이 남기기 위해 blogState에 보관 —
+  // 나중에 "이 글이 어떤 분량 지시로 나왔는지" 실제 결과물과 대조할 수 있게 함
+  if (blogState.inputs) blogState.inputs._sectionGuide = sectionGuide;
 
   return BLOG_DRAFT_TECHNICAL
     .replace('{{TYPE_RULES}}', typeRule)
@@ -583,14 +591,17 @@ async function blogFinalize(triggerBtn) {
     });
     if (result.conclusion) bodyParts.push(result.conclusion);
     await gasSavePost({
-      type:      blogState.inputs.type                              || '',
-      mood:      blogState.inputs.mood                             || '',
-      title:     result.title                                      || '',
-      topic:     blogState.inputs.topic                            || '',
-      keywords:  blogState.inputs.keywords                         || '',
-      tags:      (result.tags || []).join(', '),
-      body:      bodyParts.join('\n\n'),
-      structure: updatedDraft.structure                            || ''
+      type:         blogState.inputs.type                              || '',
+      mood:         blogState.inputs.mood                             || '',
+      title:        result.title                                      || '',
+      topic:        blogState.inputs.topic                            || '',
+      keywords:     blogState.inputs.keywords                         || '',
+      tags:         (result.tags || []).join(', '),
+      body:         bodyParts.join('\n\n'),
+      structure:    updatedDraft.structure                            || '',
+      targetLength: blogState.inputs.length                          || '',
+      sectionGuide: blogState.inputs._sectionGuide                    || '',
+      promptVersion: BLOG_PROMPT_VERSION
     });
     blogUpdateQuotaStatus();
   } catch(e) {
