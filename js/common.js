@@ -616,3 +616,4 @@ function _igUpdateStatus() {
 
 applyFeatureFlags();
 initLoginGate();
+showPage('blog'); // 로그인 후 첫 화면을 블로그로 (index.html/pages의 기본 active 상태와 맞춤)
