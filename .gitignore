@@ -2,6 +2,8 @@ config.js
 config.example.js
 js/flags.js
 gas/
+cloudflare-migration/*/.wrangler/
+cloudflare-migration/*/node_modules/
 .claude/
 CLAUDE.md
 DB.xlsx

@@ -25,6 +25,13 @@ function jsonResponse(data, status = 200) {
   });
 }
 
+// AI 프로바이더(Claude/Gemini/OpenAI) 자체가 거부/실패한 경우 502로 응답해 Cloudflare
+// Analytics의 "Workers 오류"에 잡히게 함 — 클라이언트는 상태코드를 안 보고 json.ok만 보므로
+// (_fetchGasJson) 동작에는 영향 없음, 순수 관측성 개선.
+function aiJsonResponse(data) {
+  return jsonResponse(data, data && data.upstreamError ? 502 : 200);
+}
+
 function todayKST() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
 }
@@ -212,14 +219,24 @@ async function getActiveProvider(env) {
 async function callClaude(apiKey, model, payload) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'User-Agent': 'anthropic-sdk-js/mtt-worker'
+    },
     body: JSON.stringify({
       model, max_tokens: (payload && payload.max_tokens) || 2048,
       system: (payload && payload.system) || '', messages: (payload && payload.messages) || []
     })
   });
-  const json = await res.json();
-  if (!res.ok) return { ok: false, error: (json.error && json.error.message) || ('Claude API 오류 ' + res.status) };
+  const rawText = await res.text();
+  let json; try { json = JSON.parse(rawText); } catch (e) { json = null; }
+  if (!res.ok) {
+    const message = (json && json.error && json.error.message) || ('Claude API 오류 ' + res.status);
+    console.error('Claude API 실패', res.status, rawText.slice(0, 500));
+    return { ok: false, error: message, upstreamError: true };
+  }
   const textBlock = (json.content || []).find((b) => b && b.text);
   if (!textBlock) return { ok: false, error: 'Claude 빈 응답(텍스트 블록 없음) — max_tokens을 늘려보세요.' };
   return { ok: true, data: { content: [textBlock] } };
@@ -236,24 +253,27 @@ async function callGeminiGeneral(apiKey, model, payload) {
   const messages = (payload && payload.messages) || [];
   const lastUser = messages[messages.length - 1] || {};
   const parts = toGeminiParts(lastUser.content);
+  // temperature/top_p/top_k는 모델별로 지원 여부가 바뀌어(예: gemini-3.6은 미지원) 아예 안 보냄 — 기본값 사용
   const body = {
     contents: [{ role: 'user', parts }],
-    generationConfig: { maxOutputTokens: (payload && payload.max_tokens) || 3500, temperature: 0.7 }
+    generationConfig: { maxOutputTokens: (payload && payload.max_tokens) || 3500 }
   };
   if (payload && payload.system) body.systemInstruction = { parts: [{ text: payload.system }] };
 
   const models = model ? [model, ...GEMINI_MODEL_FALLBACK.filter((m) => m !== model)] : GEMINI_MODEL_FALLBACK;
-  let lastErr = null;
+  const attempts = [];
   for (const m of models) {
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + apiKey;
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const json = await res.json();
-    if (!res.ok) { lastErr = (json.error && json.error.message) || ('Gemini API 오류 ' + res.status); continue; }
+    if (!res.ok) { attempts.push({ model: m, status: res.status, error: (json.error && json.error.message) || ('Gemini API 오류 ' + res.status) }); continue; }
     const text = json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts && json.candidates[0].content.parts[0] && json.candidates[0].content.parts[0].text;
-    if (!text) { lastErr = 'Gemini 빈 응답(안전 필터에 걸렸을 수 있습니다)'; continue; }
+    if (!text) { attempts.push({ model: m, status: res.status, error: 'Gemini 빈 응답(안전 필터에 걸렸을 수 있습니다)' }); continue; }
     return { ok: true, data: { content: [{ text }] }, modelUsed: m };
   }
-  return { ok: false, error: lastErr || 'Gemini 모든 모델 실패' };
+  console.error('Gemini 모든 모델 실패', JSON.stringify(attempts));
+  // 마지막 모델의 오류가 아니라, 최초로 실패한 원인을 우선 노출 — 뒷 모델의 부수적 오류에 진짜 원인이 묻히지 않게
+  return { ok: false, error: (attempts[0] && attempts[0].error) || 'Gemini 모든 모델 실패', upstreamError: true };
 }
 
 function toOpenAiContent(content) {
@@ -274,7 +294,11 @@ async function callOpenAiGeneral(apiKey, model, payload) {
     body: JSON.stringify({ model, max_tokens: (payload && payload.max_tokens) || 2048, messages: oaMessages })
   });
   const json = await res.json();
-  if (!res.ok) return { ok: false, error: (json.error && json.error.message) || ('OpenAI API 오류 ' + res.status) };
+  if (!res.ok) {
+    const message = (json.error && json.error.message) || ('OpenAI API 오류 ' + res.status);
+    console.error('OpenAI API 실패', res.status, JSON.stringify(json));
+    return { ok: false, error: message, upstreamError: true };
+  }
   const text = json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
   if (!text) return { ok: false, error: 'OpenAI 빈 응답' };
   return { ok: true, data: { content: [{ text }] } };
@@ -284,23 +308,24 @@ async function aiProxy(env, payload) {
   const provider = await getActiveProvider(env);
   const model = await getConfiguredModel(env, provider);
   const apiKey = await getConfigValue(env, AI_KEY_PROP[provider]);
-  if (!apiKey) return { ok: false, error: 'config 시트에 ' + AI_KEY_PROP[provider] + ' 값이 아직 입력되지 않았습니다.' };
+  if (!apiKey) return { ok: false, error: 'config 시트에 ' + AI_KEY_PROP[provider] + ' 값이 아직 입력되지 않았습니다.', upstreamError: true };
   try {
     if (provider === 'gemini') return await callGeminiGeneral(apiKey, model, payload);
     if (provider === 'openai') return await callOpenAiGeneral(apiKey, model, payload);
     return await callClaude(apiKey, model, payload);
   } catch (err) {
-    return { ok: false, error: err.message };
+    console.error('AI 프록시 실패', err.message);
+    return { ok: false, error: err.message, upstreamError: true };
   }
 }
 
 async function geminiProxy(env, payload) {
   const apiKey = await getConfigValue(env, 'GEMINI_API_KEY');
-  if (!apiKey) return { ok: false, error: 'config 시트에 GEMINI_API_KEY가 아직 설정되지 않았습니다.' };
+  if (!apiKey) return { ok: false, error: 'config 시트에 GEMINI_API_KEY가 아직 설정되지 않았습니다.', upstreamError: true };
   const preferred = (await getConfiguredModel(env, 'gemini')) || (payload && payload.model);
   const models = preferred ? [preferred, ...GEMINI_MODEL_FALLBACK.filter((m) => m !== preferred)] : GEMINI_MODEL_FALLBACK;
 
-  let lastErr = null;
+  const attempts = [];
   try {
     for (const model of models) {
       const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + apiKey;
@@ -309,18 +334,19 @@ async function geminiProxy(env, payload) {
         body: JSON.stringify({
           system_instruction: { parts: [{ text: (payload && payload.system) || '' }] },
           contents: [{ role: 'user', parts: [{ text: (payload && payload.content) || '' }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: (payload && payload.max_tokens) || 3500 }
+          generationConfig: { maxOutputTokens: (payload && payload.max_tokens) || 3500 }
         })
       });
       const json = await res.json();
-      if (!res.ok) { lastErr = (json.error && json.error.message) || ('Gemini API 오류 ' + res.status); continue; }
+      if (!res.ok) { attempts.push({ model, status: res.status, error: (json.error && json.error.message) || ('Gemini API 오류 ' + res.status) }); continue; }
       const text = json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts && json.candidates[0].content.parts[0] && json.candidates[0].content.parts[0].text;
-      if (!text) { lastErr = 'Gemini 빈 응답 (안전 필터에 걸렸을 수 있습니다)'; continue; }
+      if (!text) { attempts.push({ model, status: res.status, error: 'Gemini 빈 응답 (안전 필터에 걸렸을 수 있습니다)' }); continue; }
       return { ok: true, text, model };
     }
-    return { ok: false, error: lastErr || '모든 모델 실패' };
+    console.error('Gemini(뉴스) 모든 모델 실패', JSON.stringify(attempts));
+    return { ok: false, error: (attempts[0] && attempts[0].error) || '모든 모델 실패', upstreamError: true };
   } catch (err) {
-    return { ok: false, error: err.message };
+    return { ok: false, error: err.message, upstreamError: true };
   }
 }
 
@@ -410,8 +436,8 @@ export default {
         if (data.action === 'login') return jsonResponse({ ok: true, name: v.name, academy: v.academy, role: v.role || '' });
         if (data.action === 'myPosts') return jsonResponse({ ok: true, posts: await getMyPosts(env, data.userId, data.n || 100) });
         if (data.action === 'quotaStatus') return jsonResponse(await getQuotaStatus(env, data.userId));
-        if (data.action === 'claudeProxy') return jsonResponse(await aiProxy(env, data.payload));
-        if (data.action === 'geminiProxy') return jsonResponse(await geminiProxy(env, data.payload));
+        if (data.action === 'claudeProxy') return aiJsonResponse(await aiProxy(env, data.payload));
+        if (data.action === 'geminiProxy') return aiJsonResponse(await geminiProxy(env, data.payload));
         if (data.action === 'feedbackList') return jsonResponse(await getFeedbackThreads(env, data.userId, v.role || ''));
         if (data.action === 'feedbackPost') return jsonResponse(await postFeedback(env, data.userId, v, data.content || ''));
         if (data.action === 'feedbackReply') return jsonResponse(await replyFeedback(env, data.userId, v, data.threadId || '', data.content || ''));
