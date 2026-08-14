@@ -1,6 +1,6 @@
-// gas/news_tracker.gs 이전 — 네이버 뉴스 검색 오픈API로 최근 교육 뉴스 조회.
-// 소재 추천 자체(Gemini 호출)는 blog-tracker의 geminiProxy를 그대로 쓴다 —
-// 여기는 순수 "뉴스 목록 조회"만 담당(gas 버전과 동일한 역할 분리).
+// gas/news_tracker.gs 이전 — 네이버 뉴스 검색 오픈API로 최근 교육 뉴스 조회 +
+// 지역+수학학원 블로그 조회(학원현황 리포트용). 소재 추천/분류 자체(Gemini 호출)는
+// blog-tracker의 geminiProxy를 그대로 쓴다 — 여기는 순수 "블로그/뉴스 목록 조회"만 담당.
 
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -73,6 +73,50 @@ async function getEducationNews(env) {
   return { items, debug };
 }
 
+const REGION_BLOG_MAX_DAYS = 90;  // 최근 3개월 — 월별로 나눠 보기에 충분한 기간
+const REGION_BLOG_DISPLAY = 100;  // 네이버 블로그 검색 API 최대 허용치
+
+// 단일 쿼리("{지역} 수학학원")로 최대 100건을 가져온 뒤 최근 REGION_BLOG_MAX_DAYS일만 남긴다.
+// 실제로 어떤 글이 "진짜 수학학원 소식"인지 거르는 건 클라이언트가 Gemini로 처리한다.
+async function searchRegionAcademyBlogs(env, region) {
+  if (!region) return { error: '지역 정보 없음' };
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - REGION_BLOG_MAX_DAYS);
+
+  try {
+    const url = 'https://openapi.naver.com/v1/search/blog.json'
+      + '?query=' + encodeURIComponent(region + ' 수학학원')
+      + '&display=' + REGION_BLOG_DISPLAY + '&sort=date';
+    const res = await fetch(url, {
+      headers: {
+        'X-Naver-Client-Id': env.NAVER_CLIENT_ID,
+        'X-Naver-Client-Secret': env.NAVER_CLIENT_SECRET
+      }
+    });
+    if (!res.ok) {
+      return { items: [], debug: { status: res.status, body: (await res.text()).slice(0, 200) } };
+    }
+    const json = await res.json();
+    const items = (json.items || [])
+      .map((it) => ({
+        title: stripTags(it.title),
+        description: stripTags(it.description),
+        link: it.link,
+        bloggername: it.bloggername || '',
+        postdate: it.postdate || '' // "20260602"
+      }))
+      .filter((it) => {
+        if (!it.postdate || it.postdate.length !== 8) return true; // 날짜 파싱 불가하면 일단 포함
+        const d = new Date(Number(it.postdate.slice(0, 4)), Number(it.postdate.slice(4, 6)) - 1, Number(it.postdate.slice(6, 8)));
+        return d >= cutoff;
+      });
+    return { items };
+  } catch (err) {
+    return { items: [], error: String(err) };
+  }
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') {
@@ -89,6 +133,7 @@ export default {
     if (p.get('token') !== env.SHARED_TOKEN) return jsonResponse({ error: 'Unauthorized' }, 401);
     const action = p.get('action') || '';
     if (action === 'getEducationNews') return jsonResponse(await getEducationNews(env));
+    if (action === 'regionAcademyBlogs') return jsonResponse(await searchRegionAcademyBlogs(env, p.get('region') || ''));
     return jsonResponse({ error: '알 수 없는 action' });
   }
 };
