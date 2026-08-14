@@ -558,12 +558,12 @@ async function blogFinalize(triggerBtn) {
       + '- structure(구조 유형)를 유지한다.\n'
       + '- 결론은 ctaDirection 방향으로 마무리한다.\n'
       + '- 추가 수정 요청이 설계도와 충돌하지 않는 한 설계도를 유지한다.';
-    var raw = await blogCall(applyAcademyVars(getBlogFinalSystem()), userMsg, 8192);
-    var result;
+    var raw, result;
     try {
+      raw = await blogCall(applyAcademyVars(getBlogFinalSystem()), userMsg, 8192);
       result = blogParseJson(raw);
     } catch(parseErr) {
-      // 응답이 잘려 파싱 실패 → 더 큰 토큰으로 1회 재시도
+      // 응답이 비었거나(토큰 초과로 텍스트가 아예 안 나옴) 잘려서 파싱 실패 → 더 큰 토큰으로 1회 재시도
       raw = await blogCall(applyAcademyVars(getBlogFinalSystem()), userMsg, 16000);
       try {
         result = blogParseJson(raw);

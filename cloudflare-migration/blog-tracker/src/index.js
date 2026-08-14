@@ -4,18 +4,10 @@ import { getValues, appendRow, getSheetRowCount } from './sheets.js';
 
 const USERS_SHEET = 'users';
 const BLOG_SHEET = 'blog_posts';
-const CONFIG_SHEET = 'config';
 const FEEDBACK_SHEET = 'feedback';
 const DAILY_BLOG_LIMIT = 5;
 const RECENT_SCAN_ROWS = 500;
 
-const AI_PROVIDERS = ['claude', 'gemini', 'openai'];
-const AI_KEY_PROP = { claude: 'ANTHROPIC_API_KEY', gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY' };
-const AI_DEFAULT_MODEL = { claude: 'claude-sonnet-5', gemini: 'gemini-3.6-flash', openai: 'gpt-5.6-terra' };
-const GEMINI_MODEL_FALLBACK = [
-  'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3-flash', 'gemini-2.5-flash',
-  'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite'
-];
 const AUTHED_ACTIONS = ['login', 'myPosts', 'quotaStatus', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply'];
 
 function jsonResponse(data, status = 200) {
@@ -23,6 +15,13 @@ function jsonResponse(data, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' }
   });
+}
+
+// AI 프로바이더(Claude/Gemini/OpenAI) 자체가 거부/실패한 경우 502로 응답해 Cloudflare
+// Analytics의 "Workers 오류"에 잡히게 함 — 클라이언트는 상태코드를 안 보고 json.ok만 보므로
+// (_fetchGasJson) 동작에는 영향 없음, 순수 관측성 개선.
+function aiJsonResponse(data) {
+  return jsonResponse(data, data && data.upstreamError ? 502 : 200);
 }
 
 function todayKST() {
@@ -179,148 +178,28 @@ async function replyFeedback(env, userId, v, threadId, content) {
   return { ok: true };
 }
 
-// ── config 시트 (AI 프로바이더/모델) ────────────────────────────
-async function getConfigRows(env) {
-  return getValues(env, CONFIG_SHEET + '!A1:C');
-}
-
-async function getConfigValue(env, key) {
-  const rows = await getConfigRows(env);
-  for (const r of rows) {
-    if (String(r[0]) === key && r[1]) return String(r[1]);
-  }
-  return '';
-}
-
-async function getConfiguredModel(env, provider) {
-  const rows = await getConfigRows(env);
-  const keyRow = AI_KEY_PROP[provider];
-  for (const r of rows) {
-    if (String(r[0]) === keyRow && r[2]) return String(r[2]);
-  }
-  return AI_DEFAULT_MODEL[provider];
-}
-
-async function getActiveProvider(env) {
-  for (const p of AI_PROVIDERS) {
-    if (await getConfigValue(env, AI_KEY_PROP[p])) return p;
-  }
-  return 'claude';
-}
-
-// ── AI 프록시 ────────────────────────────────────────────────────
-async function callClaude(apiKey, model, payload) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+// Anthropic/Google이 Cloudflare Workers발 요청 자체를 차단(Claude)하거나 실행 리전에 따라
+// 지역 제한(Gemini)에 걸리는 문제가 있어, AI 호출만은 지금도 잘 동작하는 기존 GAS 웹앱으로
+// 그대로 중계한다(GAS_AI_URL/GAS_AI_TOKEN). 로그인/저장/사용량제한 등 GAS 동시요청 실패가
+// 제일 컸던 부분은 이미 Workers로 옮겨졌으니, GAS에 남는 부하는 AI 호출뿐이라 훨씬 가볍다.
+// config 시트의 AI 프로바이더/모델 선택 로직은 GAS(blog_tracker.gs) 쪽에 그대로 남아있음 —
+// 여기서 중복 구현하지 않음.
+async function forwardToGas(env, action, data) {
+  const res = await fetch(env.GAS_AI_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({
-      model, max_tokens: (payload && payload.max_tokens) || 2048,
-      system: (payload && payload.system) || '', messages: (payload && payload.messages) || []
+      action, token: env.GAS_AI_TOKEN,
+      userId: data.userId, userPw: data.userPw, site: data.site,
+      payload: data.payload
     })
   });
-  const json = await res.json();
-  if (!res.ok) return { ok: false, error: (json.error && json.error.message) || ('Claude API 오류 ' + res.status) };
-  const textBlock = (json.content || []).find((b) => b && b.text);
-  if (!textBlock) return { ok: false, error: 'Claude 빈 응답(텍스트 블록 없음) — max_tokens을 늘려보세요.' };
-  return { ok: true, data: { content: [textBlock] } };
-}
-
-function toGeminiParts(content) {
-  if (typeof content === 'string') return [{ text: content }];
-  return (content || []).map((b) =>
-    b.type === 'image' ? { inlineData: { mimeType: b.source.media_type, data: b.source.data } } : { text: b.text || '' }
-  );
-}
-
-async function callGeminiGeneral(apiKey, model, payload) {
-  const messages = (payload && payload.messages) || [];
-  const lastUser = messages[messages.length - 1] || {};
-  const parts = toGeminiParts(lastUser.content);
-  const body = {
-    contents: [{ role: 'user', parts }],
-    generationConfig: { maxOutputTokens: (payload && payload.max_tokens) || 3500, temperature: 0.7 }
-  };
-  if (payload && payload.system) body.systemInstruction = { parts: [{ text: payload.system }] };
-
-  const models = model ? [model, ...GEMINI_MODEL_FALLBACK.filter((m) => m !== model)] : GEMINI_MODEL_FALLBACK;
-  let lastErr = null;
-  for (const m of models) {
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + apiKey;
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const json = await res.json();
-    if (!res.ok) { lastErr = (json.error && json.error.message) || ('Gemini API 오류 ' + res.status); continue; }
-    const text = json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts && json.candidates[0].content.parts[0] && json.candidates[0].content.parts[0].text;
-    if (!text) { lastErr = 'Gemini 빈 응답(안전 필터에 걸렸을 수 있습니다)'; continue; }
-    return { ok: true, data: { content: [{ text }] }, modelUsed: m };
-  }
-  return { ok: false, error: lastErr || 'Gemini 모든 모델 실패' };
-}
-
-function toOpenAiContent(content) {
-  if (typeof content === 'string') return content;
-  return (content || []).map((b) =>
-    b.type === 'image' ? { type: 'image_url', image_url: { url: 'data:' + b.source.media_type + ';base64,' + b.source.data } } : { type: 'text', text: b.text || '' }
-  );
-}
-
-async function callOpenAiGeneral(apiKey, model, payload) {
-  const messages = (payload && payload.messages) || [];
-  const oaMessages = [];
-  if (payload && payload.system) oaMessages.push({ role: 'system', content: payload.system });
-  messages.forEach((m) => oaMessages.push({ role: m.role || 'user', content: toOpenAiContent(m.content) }));
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
-    body: JSON.stringify({ model, max_tokens: (payload && payload.max_tokens) || 2048, messages: oaMessages })
-  });
-  const json = await res.json();
-  if (!res.ok) return { ok: false, error: (json.error && json.error.message) || ('OpenAI API 오류 ' + res.status) };
-  const text = json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
-  if (!text) return { ok: false, error: 'OpenAI 빈 응답' };
-  return { ok: true, data: { content: [{ text }] } };
-}
-
-async function aiProxy(env, payload) {
-  const provider = await getActiveProvider(env);
-  const model = await getConfiguredModel(env, provider);
-  const apiKey = await getConfigValue(env, AI_KEY_PROP[provider]);
-  if (!apiKey) return { ok: false, error: 'config 시트에 ' + AI_KEY_PROP[provider] + ' 값이 아직 입력되지 않았습니다.' };
+  const text = await res.text();
   try {
-    if (provider === 'gemini') return await callGeminiGeneral(apiKey, model, payload);
-    if (provider === 'openai') return await callOpenAiGeneral(apiKey, model, payload);
-    return await callClaude(apiKey, model, payload);
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
-}
-
-async function geminiProxy(env, payload) {
-  const apiKey = await getConfigValue(env, 'GEMINI_API_KEY');
-  if (!apiKey) return { ok: false, error: 'config 시트에 GEMINI_API_KEY가 아직 설정되지 않았습니다.' };
-  const preferred = (await getConfiguredModel(env, 'gemini')) || (payload && payload.model);
-  const models = preferred ? [preferred, ...GEMINI_MODEL_FALLBACK.filter((m) => m !== preferred)] : GEMINI_MODEL_FALLBACK;
-
-  let lastErr = null;
-  try {
-    for (const model of models) {
-      const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + apiKey;
-      const res = await fetch(url, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: (payload && payload.system) || '' }] },
-          contents: [{ role: 'user', parts: [{ text: (payload && payload.content) || '' }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: (payload && payload.max_tokens) || 3500 }
-        })
-      });
-      const json = await res.json();
-      if (!res.ok) { lastErr = (json.error && json.error.message) || ('Gemini API 오류 ' + res.status); continue; }
-      const text = json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts && json.candidates[0].content.parts[0] && json.candidates[0].content.parts[0].text;
-      if (!text) { lastErr = 'Gemini 빈 응답 (안전 필터에 걸렸을 수 있습니다)'; continue; }
-      return { ok: true, text, model };
-    }
-    return { ok: false, error: lastErr || '모든 모델 실패' };
-  } catch (err) {
-    return { ok: false, error: err.message };
+    return JSON.parse(text);
+  } catch (e) {
+    console.error('GAS AI 중계 응답 파싱 실패', res.status, text.slice(0, 300));
+    return { ok: false, error: 'GAS 응답을 해석할 수 없습니다(HTTP ' + res.status + ')', upstreamError: true };
   }
 }
 
@@ -410,8 +289,8 @@ export default {
         if (data.action === 'login') return jsonResponse({ ok: true, name: v.name, academy: v.academy, role: v.role || '' });
         if (data.action === 'myPosts') return jsonResponse({ ok: true, posts: await getMyPosts(env, data.userId, data.n || 100) });
         if (data.action === 'quotaStatus') return jsonResponse(await getQuotaStatus(env, data.userId));
-        if (data.action === 'claudeProxy') return jsonResponse(await aiProxy(env, data.payload));
-        if (data.action === 'geminiProxy') return jsonResponse(await geminiProxy(env, data.payload));
+        if (data.action === 'claudeProxy') return aiJsonResponse(await forwardToGas(env, 'claudeProxy', data));
+        if (data.action === 'geminiProxy') return aiJsonResponse(await forwardToGas(env, 'geminiProxy', data));
         if (data.action === 'feedbackList') return jsonResponse(await getFeedbackThreads(env, data.userId, v.role || ''));
         if (data.action === 'feedbackPost') return jsonResponse(await postFeedback(env, data.userId, v, data.content || ''));
         if (data.action === 'feedbackReply') return jsonResponse(await replyFeedback(env, data.userId, v, data.threadId || '', data.content || ''));

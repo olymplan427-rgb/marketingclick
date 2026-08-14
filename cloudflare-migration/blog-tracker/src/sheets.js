@@ -13,13 +13,14 @@ function base64url(input) {
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+// PEM 헤더/푸터는 먼저 통째로 제거해야 함 — "BEGIN"/"PRIVATE"/"KEY" 같은 글자 자체가
+// base64 알파벳에 포함되어 있어서, 하이픈/공백만 걸러내는 문자 필터만으로는 헤더 텍스트가
+// 그대로 남아 실제 키 내용 앞뒤에 잘못 붙는다. 헤더 제거 후에만 나머지 잡문자(리터럴 \n,
+// 따옴표, 쉼표 등 수동 복사 시 섞이기 쉬운 것들)를 base64 알파벳 기준으로 걸러낸다.
 function pemToDer(pem) {
-  const clean = pem
-    .replace(/-----BEGIN PRIVATE KEY-----/, '')
-    .replace(/-----END PRIVATE KEY-----/, '')
-    .replace(/\\n/g, '\n')
-    .replace(/\s+/g, '');
-  const bin = atob(clean);
+  const withoutHeaders = pem.replace(/-----BEGIN [^-]+-----/g, '').replace(/-----END [^-]+-----/g, '');
+  const base64 = withoutHeaders.replace(/[^A-Za-z0-9+/=]/g, '');
+  const bin = atob(base64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes;
