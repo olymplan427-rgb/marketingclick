@@ -168,6 +168,28 @@ function blogParseJson(text) {
   throw new Error('JSON 파싱 실패');
 }
 
+// 파싱 실패 시 더 큰 max_tokens로 재시도하기 전에, 추가 API 호출 없이 되는 blogRepairJson(잘린
+// JSON 복구)을 먼저 시도한다 — 응답이 살짝 잘린 경우는 대부분 이걸로 복구되므로, 매번 두 배
+// 큰 토큰으로 재호출하는 costly한 경로(생성 시간도 늘어나 Cloudflare 524 위험도 커짐)를 피한다.
+async function blogGenerateWithRepair(systemPrompt, userText, initialTokens, retryTokens) {
+  var raw = await blogCall(systemPrompt, userText, initialTokens);
+  try {
+    return blogParseJson(raw);
+  } catch (e1) {
+    var repaired = blogRepairJson(raw);
+    if (repaired) return repaired;
+    // 복구도 실패 — 애초에 응답이 많이 잘렸을 가능성이 높으므로 더 큰 토큰으로 1회 재시도
+    raw = await blogCall(systemPrompt, userText, retryTokens);
+    try {
+      return blogParseJson(raw);
+    } catch (e2) {
+      var repaired2 = blogRepairJson(raw);
+      if (repaired2) return repaired2;
+      throw e2;
+    }
+  }
+}
+
 var BLOG_PROFILE_FIELDS = ['name','subject','target','keywords','website','phone','map','address'];
 
 function blogGenProfileId() {
@@ -463,21 +485,7 @@ async function blogGenerateDraft() {
         systemPrompt += recentSummary;
       }
     }
-    var raw = await blogCall(systemPrompt, blogBuildInputText(), 4096);
-    var draft;
-    try {
-      draft = blogParseJson(raw);
-    } catch(parseErr) {
-      // 응답이 잘려 파싱 실패 → 더 큰 토큰으로 1회 재시도
-      raw = await blogCall(systemPrompt, blogBuildInputText(), 8192);
-      try {
-        draft = blogParseJson(raw);
-      } catch(parseErr2) {
-        // 재시도도 실패 → 잘린 JSON 복구 시도 (최후의 안전망)
-        draft = blogRepairJson(raw);
-        if (!draft) throw parseErr2;
-      }
-    }
+    var draft = await blogGenerateWithRepair(systemPrompt, blogBuildInputText(), 4096, 8192);
     blogState.draft = draft;
     blogRenderOutline(draft);
     blogGoStep(2);
@@ -558,21 +566,7 @@ async function blogFinalize(triggerBtn) {
       + '- structure(구조 유형)를 유지한다.\n'
       + '- 결론은 ctaDirection 방향으로 마무리한다.\n'
       + '- 추가 수정 요청이 설계도와 충돌하지 않는 한 설계도를 유지한다.';
-    var raw, result;
-    try {
-      raw = await blogCall(applyAcademyVars(getBlogFinalSystem()), userMsg, 8192);
-      result = blogParseJson(raw);
-    } catch(parseErr) {
-      // 응답이 비었거나(토큰 초과로 텍스트가 아예 안 나옴) 잘려서 파싱 실패 → 더 큰 토큰으로 1회 재시도
-      raw = await blogCall(applyAcademyVars(getBlogFinalSystem()), userMsg, 16000);
-      try {
-        result = blogParseJson(raw);
-      } catch(parseErr2) {
-        // 재시도도 실패 → 잘린 JSON 복구 시도 (최후의 안전망)
-        result = blogRepairJson(raw);
-        if (!result) throw parseErr2;
-      }
-    }
+    var result = await blogGenerateWithRepair(applyAcademyVars(getBlogFinalSystem()), userMsg, 8192, 16000);
     var bannedFound = blogFilterBannedWords(result);
     blogStripBold(result);
     blogState.result = result;
