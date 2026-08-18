@@ -76,17 +76,22 @@ async function getEducationNews(env) {
 const REGION_BLOG_MAX_DAYS = 90;  // 최근 3개월 — 월별로 나눠 보기에 충분한 기간
 const REGION_BLOG_DISPLAY = 100;  // 네이버 블로그 검색 API 최대 허용치
 
-// 단일 쿼리("{지역} 수학학원")로 최대 100건을 가져온 뒤 최근 REGION_BLOG_MAX_DAYS일만 남긴다.
+// 단일 쿼리("{구/군/시} 수학학원")로 최대 100건을 가져온 뒤 최근 REGION_BLOG_MAX_DAYS일만 남긴다.
 // 실제로 어떤 글이 "진짜 수학학원 소식"인지 거르는 건 클라이언트가 Gemini로 처리한다.
 async function searchRegionAcademyBlogs(env, region) {
   if (!region) return { error: '지역 정보 없음' };
+
+  // "서울 중랑구"처럼 시/도 접두어까지 붙이면 네이버 검색이 AND 조건이라 결과가
+  // 과도하게 좁아져 최신 글이 다 걸러지는 문제가 실측으로 확인됨 — 마지막 토큰
+  // (구/군/시 단위)만 남겨서 검색한다. 화면에 보여주는 지역 표시(region)는 그대로 유지.
+  const districtOnly = region.trim().split(/\s+/).pop() || region;
 
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - REGION_BLOG_MAX_DAYS);
 
   try {
     const url = 'https://openapi.naver.com/v1/search/blog.json'
-      + '?query=' + encodeURIComponent(region + ' 수학학원')
+      + '?query=' + encodeURIComponent(districtOnly + ' 수학학원')
       + '&display=' + REGION_BLOG_DISPLAY + '&sort=date';
     const res = await fetch(url, {
       headers: {
