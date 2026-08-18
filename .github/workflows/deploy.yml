@@ -33,19 +33,19 @@ jobs:
           ref: beta
           path: beta-src
 
-      - name: Create config.js (dev + beta 공통 — GAS/카카오 키)
+      - name: Create config.js (dev + beta 공통 — Worker/카카오 키)
         env:
-          GAS_URL: ${{ secrets.GAS_URL }}
-          GAS_TOKEN: ${{ secrets.GAS_TOKEN }}
-          MAPSEARCH_GAS_URL: ${{ secrets.MAPSEARCH_GAS_URL }}
-          MAPSEARCH_GAS_TOKEN: ${{ secrets.MAPSEARCH_GAS_TOKEN }}
-          NEWS_GAS_URL: ${{ secrets.NEWS_GAS_URL }}
-          NEWS_GAS_TOKEN: ${{ secrets.NEWS_GAS_TOKEN }}
+          BLOG_WORKER_URL: ${{ secrets.BLOG_WORKER_URL }}
+          BLOG_WORKER_TOKEN: ${{ secrets.BLOG_WORKER_TOKEN }}
+          MAPSEARCH_WORKER_URL: ${{ secrets.MAPSEARCH_WORKER_URL }}
+          MAPSEARCH_WORKER_TOKEN: ${{ secrets.MAPSEARCH_WORKER_TOKEN }}
+          NEWS_WORKER_URL: ${{ secrets.NEWS_WORKER_URL }}
+          NEWS_WORKER_TOKEN: ${{ secrets.NEWS_WORKER_TOKEN }}
           KAKAO_KEY: ${{ secrets.KAKAO_KEY }}
         run: |
           for dir in dev-src beta-src; do
             printf 'var ADMIN_GAS = { url: "%s", token: "%s" };\nvar ADMIN_GAS_MAPSEARCH = { url: "%s", token: "%s" };\nvar ADMIN_GAS_NEWS = { url: "%s", token: "%s" };\nvar ADMIN_KAKAO_KEY = "%s";\n' \
-              "${GAS_URL}" "${GAS_TOKEN}" "${MAPSEARCH_GAS_URL}" "${MAPSEARCH_GAS_TOKEN}" "${NEWS_GAS_URL}" "${NEWS_GAS_TOKEN}" "${KAKAO_KEY}" > "$dir/config.js"
+              "${BLOG_WORKER_URL}" "${BLOG_WORKER_TOKEN}" "${MAPSEARCH_WORKER_URL}" "${MAPSEARCH_WORKER_TOKEN}" "${NEWS_WORKER_URL}" "${NEWS_WORKER_TOKEN}" "${KAKAO_KEY}" > "$dir/config.js"
           done
 
       - name: Create flags.js (dev — 기본값 그대로, 전부 켜짐)
