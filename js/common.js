@@ -116,6 +116,11 @@ function showPage(id) {
     var navMs = document.getElementById('nav-mapsearch');
     if (navMs) navMs.classList.add('active');
     if (typeof msInit === 'function') msInit();
+  } else if (id === 'report') {
+    document.getElementById('page-report').classList.add('active');
+    var navRp = document.getElementById('nav-report');
+    if (navRp) navRp.classList.add('active');
+    if (typeof reportInit === 'function') reportInit();
   } else if (id === 'feedback') {
     document.getElementById('page-feedback').classList.add('active');
     var navFb = document.getElementById('nav-feedback');

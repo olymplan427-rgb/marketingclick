@@ -1,0 +1,30 @@
+
+  <!-- PAGE REPORT -->
+  <div class="page" id="page-report">
+    <div class="blog-left">
+      <div class="panel-intro">
+        <div class="panel-intro-title">학원현황 리포트</div>
+        <div class="panel-intro-desc">우리 학원이 속한 지역의 수학학원 블로그를 모아 언급량 추이·주요 학원 프로필·콘텐츠 패턴·시사점을 분석하고, 이를 바탕으로 블로그 주제를 추천합니다</div>
+      </div>
+
+      <div class="tool-section">
+        <div class="sec-title">조회 지역</div>
+        <input class="blog-input" id="report-region" placeholder="예: 중랑구" />
+        <div class="hint-text" id="report-region-hint" style="margin-top:2px;"></div>
+      </div>
+
+      <button class="btn btn-primary" style="width:100%;" onclick="reportGenerate(this)">📋 리포트 생성</button>
+    </div>
+
+    <div class="canvas-right" style="overflow-y:auto;align-items:stretch;justify-content:flex-start;">
+      <div class="canvas-header">
+        <div class="canvas-header-left">
+          <div class="canvas-title">지역 학원현황 리포트</div>
+          <div class="canvas-desc">왼쪽에서 지역을 확인한 뒤 리포트를 생성해보세요</div>
+        </div>
+      </div>
+      <div style="padding:20px 24px;" id="report-result">
+        <div class="mon-empty-right">← 리포트가 여기에 표시됩니다</div>
+      </div>
+    </div>
+  </div><!-- /page-report -->
