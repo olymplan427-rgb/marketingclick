@@ -1,5 +1,5 @@
 // gas/news_tracker.gs 이전 — 네이버 뉴스 검색 오픈API로 최근 교육 뉴스 조회 +
-// 지역+수학학원 블로그 조회(학원현황 리포트용). 소재 추천/분류 자체(Gemini 호출)는
+// 지역+수학학원 블로그 조회(지역 트렌드 리포트용). 소재 추천/분류 자체(Gemini 호출)는
 // blog-tracker의 geminiProxy를 그대로 쓴다 — 여기는 순수 "블로그/뉴스 목록 조회"만 담당.
 
 function jsonResponse(data, status = 200) {
