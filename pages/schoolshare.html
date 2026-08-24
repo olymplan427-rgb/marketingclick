@@ -1,0 +1,41 @@
+
+  <!-- PAGE SCHOOLSHARE -->
+  <div class="page" id="page-schoolshare">
+    <div class="blog-left">
+      <div class="panel-intro">
+        <div class="panel-intro-title">학교 점유율 분석</div>
+        <div class="panel-intro-desc">인근 학교의 전체 학생 수 대비 우리 학원 재원생 비율을 확인하세요</div>
+      </div>
+
+      <div class="tool-section">
+        <div class="sec-title">학교 검색</div>
+        <select class="blog-input" id="ss-sido-select" onchange="ssOnSidoChange()">
+          <option value="">시/도 선택</option>
+        </select>
+        <select class="blog-input" id="ss-sgg-select">
+          <option value="">시군구 선택</option>
+        </select>
+        <select class="blog-input" id="ss-kind-select">
+          <option value="02">초등학교</option>
+          <option value="03">중학교</option>
+          <option value="04">고등학교</option>
+        </select>
+        <button class="btn btn-primary" style="width:100%;" onclick="ssSearchSchool()">검색</button>
+      </div>
+
+      <div id="ss-search-results" style="display:none;"></div>
+    </div>
+
+    <div class="canvas-right" style="overflow-y:auto;align-items:stretch;justify-content:flex-start;">
+      <div class="canvas-header">
+        <div class="canvas-header-left">
+          <div class="canvas-title">내 학교 목록</div>
+          <div class="canvas-desc">왼쪽에서 학교를 검색해 추가한 뒤 학년별 학원생 수를 입력하세요</div>
+        </div>
+        <button class="btn btn-primary" onclick="ssSaveData()">저장하기</button>
+      </div>
+      <div style="padding:20px 24px;" id="ss-schools-container">
+        <div class="mon-empty-right">← 왼쪽에서 학교를 검색해 추가해보세요</div>
+      </div>
+    </div>
+  </div><!-- /page-schoolshare -->

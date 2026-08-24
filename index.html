@@ -43,6 +43,9 @@
     <div class="sidebar-item" onclick="showPage('report')" id="nav-report">
       <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M15 3v5h5"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg></span>지역 트렌드 리포트
     </div>
+    <div class="sidebar-item" onclick="showPage('schoolshare')" id="nav-schoolshare">
+      <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span>학교 점유율
+    </div>
   </div>
   <div class="sidebar-bottom">
     <div class="sidebar-item" onclick="showPage('feedback')" id="nav-feedback">
@@ -92,7 +95,7 @@
 <script>
 (function() {
   var container = document.getElementById('main-container');
-  var pages = ['pages/image.html', 'pages/blog.html', 'pages/monitor.html', 'pages/mapsearch.html', 'pages/report.html', 'pages/feedback.html', 'pages/settings.html'];
+  var pages = ['pages/image.html', 'pages/blog.html', 'pages/monitor.html', 'pages/mapsearch.html', 'pages/report.html', 'pages/schoolshare.html', 'pages/feedback.html', 'pages/settings.html'];
   pages.forEach(function(url) {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, false); // synchronous — 로컬 서버 전용
@@ -117,6 +120,8 @@
 <script src="js/mapsearch.js"></script>
 <script src="js/news.js"></script>
 <script src="js/report.js"></script>
+<script src="js/schoolRegionCodes.js"></script>
+<script src="js/schoolshare.js"></script>
 <script src="js/feedback.js"></script>
 <script src="js/common.js"></script>
 </body>

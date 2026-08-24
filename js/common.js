@@ -121,6 +121,10 @@ function showPage(id) {
     var navRp = document.getElementById('nav-report');
     if (navRp) navRp.classList.add('active');
     if (typeof reportInit === 'function') reportInit();
+  } else if (id === 'schoolshare') {
+    document.getElementById('page-schoolshare').classList.add('active');
+    var navSs = document.getElementById('nav-schoolshare');
+    if (navSs) navSs.classList.add('active');
   } else if (id === 'feedback') {
     document.getElementById('page-feedback').classList.add('active');
     var navFb = document.getElementById('nav-feedback');

@@ -1,7 +1,6 @@
 config.js
 config.example.js
 js/flags.js
-gas/
 cloudflare-migration/*/.wrangler/
 cloudflare-migration/*/node_modules/
 cloudflare-migration/*/.dev.vars
