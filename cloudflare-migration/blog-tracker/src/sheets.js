@@ -92,6 +92,17 @@ export async function appendRow(env, sheetName, row) {
   });
 }
 
+// appendRow와 동일하게 valueInputOption=RAW — 이미 존재하는 특정 행을 그대로 덮어쓴다(upsert의 update 절반).
+export async function updateRow(env, sheetName, rowNumber, row) {
+  const lastCol = String.fromCharCode(65 + row.length - 1); // A, B, C, ...
+  const range = encodeURIComponent(sheetName + '!A' + rowNumber + ':' + lastCol + rowNumber);
+  await sheetsFetch(env, '/values/' + range + '?valueInputOption=RAW', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values: [row] })
+  });
+}
+
 export async function getSheetRowCount(env, sheetName) {
   const json = await sheetsFetch(env, '?fields=' + encodeURIComponent('sheets.properties(title,gridProperties.rowCount)'));
   const sheet = (json.sheets || []).find((s) => s.properties.title === sheetName);

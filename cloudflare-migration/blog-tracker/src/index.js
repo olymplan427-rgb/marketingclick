@@ -1,6 +1,6 @@
 // gas/blog_tracker.gs 이전 — 블로그 저장/조회 + 로그인/사용량 제한 + Claude·Gemini·OpenAI 프록시.
 // 클라이언트(js/common.js)는 전혀 수정 불필요 — GAS 웹앱 URL 자리에 이 워커의 URL만 넣으면 됨.
-import { getValues, appendRow, getSheetRowCount } from './sheets.js';
+import { getValues, appendRow, updateRow, getSheetRowCount } from './sheets.js';
 
 const USERS_SHEET = 'users';
 const BLOG_SHEET = 'blog_posts';
@@ -8,7 +8,21 @@ const FEEDBACK_SHEET = 'feedback';
 const DAILY_BLOG_LIMIT = 5;
 const RECENT_SCAN_ROWS = 500;
 
-const AUTHED_ACTIONS = ['login', 'myPosts', 'quotaStatus', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply'];
+const AUTHED_ACTIONS = ['login', 'myPosts', 'quotaStatus', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch'];
+const SCHOOL_SHARE_SHEET = 'school_share';
+
+// ── AI 설정 — gas/blog_tracker.gs에서 그대로 포팅 (전부 "config" 시트 하나로 관리) ──
+// 활성 프로바이더를 따로 고르지 않음 — API 키가 채워진 행이 곧 쓰이는 AI다. 여러 개가 채워져 있으면
+// AI_PROVIDERS 선언 순서(claude → gemini → openai)대로 가장 먼저 키가 있는 걸 사용한다.
+const CONFIG_SHEET = 'config';
+const AI_PROVIDERS = ['claude', 'gemini', 'openai'];
+const AI_KEY_PROP = { claude: 'ANTHROPIC_API_KEY', gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY' };
+const AI_DEFAULT_MODEL = { claude: 'claude-sonnet-5', gemini: 'gemini-3.6-flash', openai: 'gpt-5.6-terra' };
+const AI_MODEL_CATALOG = {
+  claude: ['claude-sonnet-5', 'claude-opus-5', 'claude-haiku-4-5-20251001', 'claude-fable-5'],
+  gemini: ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3-flash', 'gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite'],
+  openai: ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna']
+};
 
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -178,29 +192,145 @@ async function replyFeedback(env, userId, v, threadId, content) {
   return { ok: true };
 }
 
-// Anthropic/Google이 Cloudflare Workers발 요청 자체를 차단(Claude)하거나 실행 리전에 따라
-// 지역 제한(Gemini)에 걸리는 문제가 있어, AI 호출만은 지금도 잘 동작하는 기존 GAS 웹앱으로
-// 그대로 중계한다(GAS_AI_URL/GAS_AI_TOKEN). 로그인/저장/사용량제한 등 GAS 동시요청 실패가
-// 제일 컸던 부분은 이미 Workers로 옮겨졌으니, GAS에 남는 부하는 AI 호출뿐이라 훨씬 가볍다.
-// config 시트의 AI 프로바이더/모델 선택 로직은 GAS(blog_tracker.gs) 쪽에 그대로 남아있음 —
-// 여기서 중복 구현하지 않음.
-async function forwardToGas(env, action, data) {
-  const res = await fetch(env.GAS_AI_URL, {
+// ── 학교 점유율 ────────────────────────────────────────────────
+// userId로 school_share 시트에서 행 위치(2-based sheet row)를 찾음 — 없으면 null.
+async function findSchoolShareRow(env, userId) {
+  const rows = await getValues(env, SCHOOL_SHARE_SHEET + '!A2:C');
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (String(rows[i][1]) === String(userId)) return { rowNumber: i + 2, row: rows[i] };
+  }
+  return null;
+}
+
+async function loadSchoolShare(env, userId) {
+  try {
+    const found = await findSchoolShareRow(env, userId);
+    return { ok: true, data: found ? found.row[2] : null };
+  } catch (e) {
+    return { ok: false, error: 'school_share 시트 접근 오류 (탭이 없거나 권한 문제)' };
+  }
+}
+
+async function saveSchoolShare(env, userId, jsonData) {
+  try {
+    const found = await findSchoolShareRow(env, userId);
+    if (found) {
+      await updateRow(env, SCHOOL_SHARE_SHEET, found.rowNumber, [nowKST(), userId, jsonData]);
+    } else {
+      await appendRow(env, SCHOOL_SHARE_SHEET, [nowKST(), userId, jsonData]);
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: 'school_share 시트 저장 오류' };
+  }
+}
+
+// ── 학교알리미 OpenAPI (schoolinfo.go.kr) 프록시 ─────────────────────
+// schoolinfo.go.kr가 Cloudflare 대역 트래픽을 차단해서(522, 실측 확인됨) Worker에서 직접 호출이
+// 안 됨 — Anthropic/Google이 Workers를 막는 것과 같은 부류의 문제라, 여기서도 Cloudflare가 아닌
+// 다른 네트워크(Vercel)를 한 번 더 거쳐 중계한다. 실제 schoolinfo.go.kr 호출·연도 폴백·apiType
+// 0/09 병합 로직은 전부 marketingtool/vercel-schoolinfo-proxy/api/search.js 쪽에 있음.
+async function schoolShareSearch(env, sidoCode, sggCode, schulKndCode) {
+  if (!sidoCode || !sggCode || !schulKndCode) return { ok: false, error: '시/도, 시군구, 학교급을 모두 선택하세요.' };
+  try {
+    const url = env.SCHOOLINFO_PROXY_URL + '?token=' + encodeURIComponent(env.SCHOOLINFO_PROXY_TOKEN) +
+      '&sidoCode=' + encodeURIComponent(sidoCode) + '&sggCode=' + encodeURIComponent(sggCode) + '&schulKndCode=' + encodeURIComponent(schulKndCode);
+    const res = await fetch(url);
+    return await res.json();
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// config 시트(A~C열: 설정/값/모델, E~F열: 프로바이더/모델 표) 조회 — gas/blog_tracker.gs의
+// _getConfigValue/_getConfiguredModel/_getModelCatalogFromSheet/_getModelListForProvider/
+// _getActiveProvider를 그대로 포팅. 매 호출마다 시트를 읽어서 관리자가 시트만 고치면
+// 코드 재배포 없이 즉시 반영되는 기존 동작을 유지한다.
+async function getConfigValue(env, key) {
+  const rows = await getValues(env, CONFIG_SHEET + '!A2:C');
+  for (const r of rows) {
+    if (String(r[0]) === key && r[1]) return String(r[1]);
+  }
+  return '';
+}
+
+async function getConfiguredModel(env, provider) {
+  const rows = await getValues(env, CONFIG_SHEET + '!A2:C');
+  const keyRow = AI_KEY_PROP[provider];
+  for (const r of rows) {
+    if (String(r[0]) === keyRow && r[2]) return String(r[2]);
+  }
+  return AI_DEFAULT_MODEL[provider];
+}
+
+async function getModelListForProvider(env, provider) {
+  const rows = await getValues(env, CONFIG_SHEET + '!E2:F');
+  const list = [];
+  rows.forEach((r) => {
+    const p = String(r[0] || '').trim();
+    const m = String(r[1] || '').trim();
+    if (p === provider && m && list.indexOf(m) === -1) list.push(m);
+  });
+  return list.length ? list : (AI_MODEL_CATALOG[provider] || []);
+}
+
+async function getActiveProvider(env) {
+  for (const p of AI_PROVIDERS) {
+    if (await getConfigValue(env, AI_KEY_PROP[p])) return p;
+  }
+  return 'claude';
+}
+
+// Anthropic/Google이 Cloudflare Workers발 요청 자체를 차단·지역제한하는 문제가 있어(학교알리미 API도
+// 같은 부류로 확인됨), 실제 AI 호출만은 Cloudflare가 아닌 Vercel(env.AI_RELAY_URL)로 중계한다.
+// API 키는 여기서 매번 config 시트에서 조회해 함께 넘길 뿐, Vercel 쪽엔 저장하지 않는다 —
+// "AI 키는 config 시트가 유일한 출처"라는 기존 설계 유지.
+async function callAiRelay(env, body) {
+  const res = await fetch(env.AI_RELAY_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({
-      action, token: env.GAS_AI_TOKEN,
-      userId: data.userId, userPw: data.userPw, site: data.site,
-      payload: data.payload
-    })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: env.AI_RELAY_TOKEN, ...body })
   });
   const text = await res.text();
   try {
     return JSON.parse(text);
   } catch (e) {
-    console.error('GAS AI 중계 응답 파싱 실패', res.status, text.slice(0, 300));
-    return { ok: false, error: 'GAS 응답을 해석할 수 없습니다(HTTP ' + res.status + ')', upstreamError: true };
+    console.error('AI 릴레이 응답 파싱 실패', res.status, text.slice(0, 300));
+    return { ok: false, error: 'AI 릴레이 응답을 해석할 수 없습니다(HTTP ' + res.status + ')', upstreamError: true };
   }
+}
+
+// gas/blog_tracker.gs의 _aiProxy 포팅 — 활성 프로바이더(키가 채워진 첫 프로바이더)로 1회 호출.
+// gemini가 활성인 경우에만 config 시트의 모델 목록 전체를 폴백용으로 함께 넘긴다.
+async function claudeProxy(env, payload) {
+  const provider = await getActiveProvider(env);
+  const apiKey = await getConfigValue(env, AI_KEY_PROP[provider]);
+  if (!apiKey) return { ok: false, error: 'config 시트에 ' + AI_KEY_PROP[provider] + ' 값이 아직 입력되지 않았습니다.' };
+  const model = await getConfiguredModel(env, provider);
+  const models = provider === 'gemini' ? [model, ...(await getModelListForProvider(env, provider)).filter((m) => m !== model)] : [model];
+  return callAiRelay(env, {
+    provider, apiKey, models,
+    system: (payload && payload.system) || '',
+    messages: (payload && payload.messages) || [],
+    max_tokens: payload && payload.max_tokens
+  });
+}
+
+// gas/blog_tracker.gs의 _geminiProxy 포팅 — 뉴스 소재추천/지역 트렌드 리포트 전용, 항상 Gemini만 사용.
+async function geminiProxy(env, payload) {
+  const apiKey = await getConfigValue(env, 'GEMINI_API_KEY');
+  if (!apiKey) return { ok: false, error: 'config 시트에 GEMINI_API_KEY가 아직 설정되지 않았습니다.' };
+  const preferred = await getConfiguredModel(env, 'gemini');
+  const fallback = await getModelListForProvider(env, 'gemini');
+  const models = [preferred, ...fallback.filter((m) => m !== preferred)];
+  const result = await callAiRelay(env, {
+    provider: 'gemini', apiKey, models,
+    system: (payload && payload.system) || '',
+    messages: [{ role: 'user', content: (payload && payload.content) || '' }],
+    max_tokens: payload && payload.max_tokens
+  });
+  if (!result.ok) return result;
+  return { ok: true, text: result.text, model: result.model };
 }
 
 // ── 네이버 블로그 본문 수집 (참고 URL 기능용) ──────────────────────
@@ -289,11 +419,14 @@ export default {
         if (data.action === 'login') return jsonResponse({ ok: true, name: v.name, academy: v.academy, role: v.role || '' });
         if (data.action === 'myPosts') return jsonResponse({ ok: true, posts: await getMyPosts(env, data.userId, data.n || 100) });
         if (data.action === 'quotaStatus') return jsonResponse(await getQuotaStatus(env, data.userId));
-        if (data.action === 'claudeProxy') return aiJsonResponse(await forwardToGas(env, 'claudeProxy', data));
-        if (data.action === 'geminiProxy') return aiJsonResponse(await forwardToGas(env, 'geminiProxy', data));
+        if (data.action === 'claudeProxy') return aiJsonResponse(await claudeProxy(env, data.payload));
+        if (data.action === 'geminiProxy') return aiJsonResponse(await geminiProxy(env, data.payload));
         if (data.action === 'feedbackList') return jsonResponse(await getFeedbackThreads(env, data.userId, v.role || ''));
         if (data.action === 'feedbackPost') return jsonResponse(await postFeedback(env, data.userId, v, data.content || ''));
         if (data.action === 'feedbackReply') return jsonResponse(await replyFeedback(env, data.userId, v, data.threadId || '', data.content || ''));
+        if (data.action === 'loadSchoolShare') return jsonResponse(await loadSchoolShare(env, data.userId));
+        if (data.action === 'saveSchoolShare') return jsonResponse(await saveSchoolShare(env, data.userId, data.jsonData || ''));
+        if (data.action === 'schoolShareSearch') return jsonResponse(await schoolShareSearch(env, data.sidoCode || '', data.sggCode || '', data.schulKndCode || ''));
       }
 
       if (data.token !== env.SHARED_TOKEN) return jsonResponse({ error: 'Unauthorized' });
