@@ -405,6 +405,10 @@ function applyFeatureFlags() {
     var navMs = document.getElementById('nav-mapsearch');
     if (navMs) navMs.style.display = 'none';
   }
+  if (f.schoolshare === false) {
+    var navSs = document.getElementById('nav-schoolshare');
+    if (navSs) navSs.style.display = 'none';
+  }
   if (f.instagram === false) {
     var navIg = document.getElementById('nav-settings-instagram');
     if (navIg) navIg.style.display = 'none';
