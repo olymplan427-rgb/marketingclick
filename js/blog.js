@@ -172,22 +172,37 @@ function blogParseJson(text) {
 // JSON 복구)을 먼저 시도한다 — 응답이 살짝 잘린 경우는 대부분 이걸로 복구되므로, 매번 두 배
 // 큰 토큰으로 재호출하는 costly한 경로(생성 시간도 늘어나 Cloudflare 524 위험도 커짐)를 피한다.
 async function blogGenerateWithRepair(systemPrompt, userText, initialTokens, retryTokens) {
-  var raw = await blogCall(systemPrompt, userText, initialTokens);
-  try {
-    return blogParseJson(raw);
-  } catch (e1) {
-    var repaired = blogRepairJson(raw);
-    if (repaired) return repaired;
-    // 복구도 실패 — 애초에 응답이 많이 잘렸을 가능성이 높으므로 더 큰 토큰으로 1회 재시도
-    raw = await blogCall(systemPrompt, userText, retryTokens);
+  // blogCall 자체가 던지는 경우(예: "생각" 토큰이 max_tokens를 다 써서 텍스트가 하나도
+  // 없는 빈 응답)도 파싱 실패와 동일하게 재시도 대상이어야 하므로, try 안으로 감싼다 —
+  // 이전엔 이 호출이 try 밖에 있어서 빈 응답이면 재시도 없이 바로 에러가 던져졌었음.
+  async function attempt(tokens) {
     try {
-      return blogParseJson(raw);
-    } catch (e2) {
-      var repaired2 = blogRepairJson(raw);
+      return { raw: await blogCall(systemPrompt, userText, tokens), error: null };
+    } catch (e) {
+      return { raw: null, error: e };
+    }
+  }
+
+  var first = await attempt(initialTokens);
+  if (first.raw) {
+    try { return blogParseJson(first.raw); }
+    catch (e1) {
+      var repaired = blogRepairJson(first.raw);
+      if (repaired) return repaired;
+    }
+  }
+
+  // 첫 시도가 빈 응답을 던졌거나 파싱/복구에 실패 — 더 큰 토큰으로 1회 재시도
+  var second = await attempt(retryTokens);
+  if (second.raw) {
+    try { return blogParseJson(second.raw); }
+    catch (e2) {
+      var repaired2 = blogRepairJson(second.raw);
       if (repaired2) return repaired2;
       throw e2;
     }
   }
+  throw second.error || first.error || new Error('AI 응답을 받지 못했습니다.');
 }
 
 var BLOG_PROFILE_FIELDS = ['name','subject','target','keywords','website','phone','map','address'];
