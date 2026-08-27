@@ -71,6 +71,15 @@ function getDailyLimitFor(user) {
   return (!isNaN(n) && n > 0) ? n : DAILY_BLOG_LIMIT;
 }
 
+async function registerUser(env, id, password, name, academy, site) {
+  if (!id || !password || !name || !academy) return { ok: false, error: '모든 항목을 입력하세요.' };
+  if (site === 'dev') return { ok: false, error: '이 주소는 개발용입니다. 정식 주소에서 가입해주세요.' };
+  const existing = await findUser(env, id);
+  if (existing) return { ok: false, error: '이미 사용 중인 아이디입니다.' };
+  await appendRow(env, USERS_SHEET, [id, password, name, academy, '사용', '', DAILY_BLOG_LIMIT]);
+  return { ok: true };
+}
+
 async function verifyUser(env, id, password, site) {
   const u = await findUser(env, id);
   if (!u) return { valid: false, error: '존재하지 않는 아이디입니다.' };
@@ -411,6 +420,11 @@ export default {
       }
 
       const data = await request.json();
+
+      if (data.action === 'register') {
+        if (data.token !== env.SHARED_TOKEN) return jsonResponse({ ok: false, error: 'Unauthorized' });
+        return jsonResponse(await registerUser(env, data.userId, data.userPw, data.name || '', data.academy || '', data.site));
+      }
 
       if (AUTHED_ACTIONS.includes(data.action)) {
         if (data.token !== env.SHARED_TOKEN) return jsonResponse({ ok: false, error: 'Unauthorized' });
