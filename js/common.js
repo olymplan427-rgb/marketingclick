@@ -221,8 +221,72 @@ async function loginSubmit() {
   }
 }
 
+var _loginOverlayMode = 'login';
+
+function setLoginOverlayMode(mode) {
+  _loginOverlayMode = mode;
+  var isRegister = mode === 'register';
+  var titleEl = document.getElementById('login-title');
+  var subEl = document.getElementById('login-subtitle');
+  var fieldsEl = document.getElementById('login-register-fields');
+  var btnEl = document.getElementById('login-submit');
+  var toReg = document.getElementById('login-toggle-to-register');
+  var toLogin = document.getElementById('login-toggle-to-login');
+  var errEl = document.getElementById('login-error');
+  if (titleEl) titleEl.textContent = isRegister ? 'MarketingTool 회원가입' : 'MarketingTool 로그인';
+  if (subEl) subEl.textContent = isRegister ? '원하는 아이디/비밀번호를 만들어주세요' : '원하는 아이디/비밀번호로 로그인하세요';
+  if (fieldsEl) fieldsEl.style.display = isRegister ? 'block' : 'none';
+  if (btnEl) btnEl.textContent = isRegister ? '가입하고 시작하기' : '로그인';
+  if (toReg) toReg.style.display = isRegister ? 'none' : 'block';
+  if (toLogin) toLogin.style.display = isRegister ? 'block' : 'none';
+  if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+}
+
+function loginOverlaySubmit() {
+  if (_loginOverlayMode === 'register') return registerSubmit();
+  return loginSubmit();
+}
+
+async function registerSubmit() {
+  var idEl = document.getElementById('login-id');
+  var pwEl = document.getElementById('login-pw');
+  var nameEl = document.getElementById('login-reg-name');
+  var academyEl = document.getElementById('login-reg-academy');
+  var errEl = document.getElementById('login-error');
+  var btn = document.getElementById('login-submit');
+  var id = idEl ? idEl.value.trim() : '';
+  var pw = pwEl ? pwEl.value : '';
+  var name = nameEl ? nameEl.value.trim() : '';
+  var academy = academyEl ? academyEl.value.trim() : '';
+  if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+  if (!id || !pw || !name || !academy) { if (errEl) { errEl.textContent = '모든 항목을 입력하세요.'; errEl.style.display = 'block'; } return; }
+  var cfg = getGasConfig();
+  if (!cfg.url || !cfg.token) { if (errEl) { errEl.textContent = '서버 설정 오류(GAS 미설정)'; errEl.style.display = 'block'; } return; }
+  if (btn) { btn.disabled = true; btn.textContent = '가입 중...'; }
+  try {
+    var json = await _fetchGasJson(cfg.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'register', token: cfg.token, userId: id, userPw: pw, name: name, academy: academy, site: _siteId() })
+    });
+    if (!json.ok) { if (errEl) { errEl.textContent = json.error || '가입 실패'; errEl.style.display = 'block'; } return; }
+    localStorage.setItem(_authKey('user_id'), id);
+    localStorage.setItem(_authKey('user_pw'), pw);
+    localStorage.setItem(_authKey('user_name'), name);
+    localStorage.setItem(_authKey('user_academy'), academy);
+    localStorage.setItem(_authKey('user_role'), '');
+    localStorage.setItem(_authKey('last_active'), String(Date.now()));
+    hideLoginOverlay();
+  } catch(e) {
+    if (errEl) { errEl.textContent = '연결 오류: ' + e.message; errEl.style.display = 'block'; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = _loginOverlayMode === 'register' ? '가입하고 시작하기' : '로그인'; }
+  }
+}
+
 function logoutUser() {
   clearUserAuth();
+  setLoginOverlayMode('login');
   showLoginOverlay();
 }
 
