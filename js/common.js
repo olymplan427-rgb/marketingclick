@@ -229,6 +229,7 @@ function setLoginOverlayMode(mode) {
   var titleEl = document.getElementById('login-title');
   var subEl = document.getElementById('login-subtitle');
   var fieldsEl = document.getElementById('login-register-fields');
+  var pwConfirmFieldEl = document.getElementById('login-reg-pw-confirm-field');
   var btnEl = document.getElementById('login-submit');
   var toReg = document.getElementById('login-toggle-to-register');
   var toLogin = document.getElementById('login-toggle-to-login');
@@ -236,6 +237,7 @@ function setLoginOverlayMode(mode) {
   if (titleEl) titleEl.textContent = isRegister ? 'MarketingTool 회원가입' : 'MarketingTool 로그인';
   if (subEl) subEl.textContent = isRegister ? '원하는 아이디/비밀번호를 만들어주세요' : '원하는 아이디/비밀번호로 로그인하세요';
   if (fieldsEl) fieldsEl.style.display = isRegister ? 'block' : 'none';
+  if (pwConfirmFieldEl) pwConfirmFieldEl.style.display = isRegister ? 'block' : 'none';
   if (btnEl) btnEl.textContent = isRegister ? '가입하고 시작하기' : '로그인';
   if (toReg) toReg.style.display = isRegister ? 'none' : 'block';
   if (toLogin) toLogin.style.display = isRegister ? 'block' : 'none';
@@ -250,16 +252,19 @@ function loginOverlaySubmit() {
 async function registerSubmit() {
   var idEl = document.getElementById('login-id');
   var pwEl = document.getElementById('login-pw');
+  var pwConfirmEl = document.getElementById('login-reg-pw-confirm');
   var nameEl = document.getElementById('login-reg-name');
   var academyEl = document.getElementById('login-reg-academy');
   var errEl = document.getElementById('login-error');
   var btn = document.getElementById('login-submit');
   var id = idEl ? idEl.value.trim() : '';
   var pw = pwEl ? pwEl.value : '';
+  var pwConfirm = pwConfirmEl ? pwConfirmEl.value : '';
   var name = nameEl ? nameEl.value.trim() : '';
   var academy = academyEl ? academyEl.value.trim() : '';
   if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
-  if (!id || !pw || !name || !academy) { if (errEl) { errEl.textContent = '모든 항목을 입력하세요.'; errEl.style.display = 'block'; } return; }
+  if (!id || !pw || !pwConfirm || !name || !academy) { if (errEl) { errEl.textContent = '모든 항목을 입력하세요.'; errEl.style.display = 'block'; } return; }
+  if (pw !== pwConfirm) { if (errEl) { errEl.textContent = '비밀번호가 일치하지 않습니다.'; errEl.style.display = 'block'; } return; }
   var cfg = getGasConfig();
   if (!cfg.url || !cfg.token) { if (errEl) { errEl.textContent = '서버 설정 오류(GAS 미설정)'; errEl.style.display = 'block'; } return; }
   if (btn) { btn.disabled = true; btn.textContent = '가입 중...'; }
