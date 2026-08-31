@@ -331,8 +331,8 @@ canvas{display:block;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.15);cu
 .empty-state-desc{font-size:13px;color:var(--mut);line-height:1.6;max-width:320px;}
 
 /* ── 공통 안내 배너 — 아이콘 배지 + 굵은 타이틀 + 설명, 우측에 배지 슬롯 ── */
-.info-banner{display:flex;align-items:center;gap:14px;padding:14px 20px;background:var(--acc-light);border-bottom:1px solid var(--acc-border);flex-shrink:0;}
-.info-banner-icon{width:34px;height:34px;border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--acc);}
+.info-banner{display:flex;align-items:center;gap:14px;margin:16px 24px 0;padding:14px 20px;background:#fff;border:1px solid var(--bdr);border-radius:12px;flex-shrink:0;}
+.info-banner-icon{width:34px;height:34px;border-radius:8px;background:var(--acc-light);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--acc);}
 .info-banner-icon svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
 .info-banner-body{flex:1;min-width:0;}
 .info-banner-title{font-size:14px;font-weight:800;color:var(--txt);}
