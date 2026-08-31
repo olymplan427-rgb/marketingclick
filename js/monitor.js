@@ -1761,7 +1761,7 @@ function monSetRegion(el, val) {
   el.classList.add('active-region');
   monRegion = val; monSelected = null;
   if (monChart) { monChart.destroy(); monChart = null; }
-  document.getElementById('mon-right-panel').innerHTML = '<div class="mon-empty-right">← 학원을 선택하면 상세 내용이 표시됩니다</div>';
+  document.getElementById('mon-right-panel').innerHTML = '<div class="empty-state"><div class="empty-state-title">학원을 선택하면 상세 내용이 표시됩니다</div><div class="empty-state-desc">왼쪽 목록에서 학원을 클릭해보세요</div></div>';
   monRenderList();
 }
 function monSetDate(el, val) {

@@ -17,14 +17,22 @@
     </div>
 
     <div class="canvas-right" style="overflow-y:auto;align-items:stretch;justify-content:flex-start;">
-      <div class="canvas-header">
-        <div class="canvas-header-left">
-          <div class="canvas-title">지역 트렌드 리포트</div>
-          <div class="canvas-desc">왼쪽에서 지역을 확인한 뒤 리포트를 생성해보세요</div>
+      <div class="info-banner">
+        <div class="info-banner-icon"><svg viewBox="0 0 24 24"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M15 3v5h5"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg></div>
+        <div class="info-banner-body">
+          <div class="info-banner-title">지역 블로그를 모아 트렌드를 한눈에</div>
+          <div class="info-banner-desc">언급량 추이·주요 학원 프로필·콘텐츠 패턴을 분석해 블로그 주제까지 추천합니다</div>
+        </div>
+        <div class="info-banner-badges">
+          <span class="info-banner-badge">AI 분석</span>
+          <span class="info-banner-badge">즉시 생성</span>
         </div>
       </div>
-      <div style="padding:20px 24px;" id="report-result">
-        <div class="mon-empty-right">← 리포트가 여기에 표시됩니다</div>
+      <div style="padding:20px 24px;display:flex;" id="report-result">
+        <div class="empty-state">
+          <div class="empty-state-title">리포트가 여기에 표시됩니다</div>
+          <div class="empty-state-desc">왼쪽에서 지역을 확인한 뒤 리포트를 생성해보세요</div>
+        </div>
       </div>
     </div>
   </div><!-- /page-report -->
