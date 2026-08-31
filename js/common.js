@@ -492,6 +492,8 @@ function applyFeatureFlags() {
   if (f.promo === false) {
     var promoSec = document.getElementById('promo-section');
     if (promoSec) promoSec.style.display = 'none';
+    var imgPromoSec = document.getElementById('img-promo-section');
+    if (imgPromoSec) imgPromoSec.style.display = 'none';
   }
   if (f.accountNote === false) {
     var accNote = document.getElementById('account-sub-note');
