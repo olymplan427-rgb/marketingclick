@@ -234,7 +234,7 @@ function setLoginOverlayMode(mode) {
   var toReg = document.getElementById('login-toggle-to-register');
   var toLogin = document.getElementById('login-toggle-to-login');
   var errEl = document.getElementById('login-error');
-  if (titleEl) titleEl.textContent = isRegister ? 'MarketingTool 회원가입' : 'MarketingTool 로그인';
+  if (titleEl) titleEl.textContent = isRegister ? '마케팅딸깍 회원가입' : '마케팅딸깍 로그인';
   if (subEl) subEl.textContent = isRegister ? '원하는 아이디/비밀번호를 만들어주세요' : '원하는 아이디/비밀번호로 로그인하세요';
   if (fieldsEl) fieldsEl.style.display = isRegister ? 'block' : 'none';
   if (pwConfirmFieldEl) pwConfirmFieldEl.style.display = isRegister ? 'block' : 'none';
