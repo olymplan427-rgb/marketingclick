@@ -4,6 +4,9 @@ js/flags.js
 cloudflare-migration/*/.wrangler/
 cloudflare-migration/*/node_modules/
 cloudflare-migration/*/.dev.vars
+.wrangler/
+monitor-pipeline/__pycache__/
+monitor-pipeline/**/__pycache__/
 .claude/
 CLAUDE.md
 SECRETS.md

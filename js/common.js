@@ -532,6 +532,15 @@ function getNewsGasConfig() {
   };
 }
 
+// 경쟁학원 온디맨드 모니터링 전용 Worker(cloudflare-migration/monitor-tracker) — 2026-08-31 프로토타입
+function getMonitorGasConfig() {
+  var gas = (typeof ADMIN_GAS_MONITOR !== 'undefined') ? ADMIN_GAS_MONITOR : {};
+  return {
+    url:   (gas.url   && gas.url.trim())   ? gas.url.trim()   : (localStorage.getItem('mtt_gas_url_monitor')   || ''),
+    token: (gas.token && gas.token.trim()) ? gas.token.trim() : (localStorage.getItem('mtt_gas_token_monitor') || '')
+  };
+}
+
 async function gasSavePost(data) {
   var cfg = getGasConfig();
   if (!cfg.url || !cfg.token) return;
