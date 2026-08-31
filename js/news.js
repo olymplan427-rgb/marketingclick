@@ -167,7 +167,14 @@ function newsRenderTopicDetail(t, idx) {
   var sources = (t.sourceIds || []).map(function(id) {
     var src = newsRaw[id];
     if (!src) return '';
-    return '<div style="font-size:12px;color:var(--mut);margin-top:4px;">· <a href="' + src.link.replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" style="color:var(--acc);text-decoration:underline;">' + (src.title || '').replace(/</g,'&lt;') + '</a></div>';
+    var desc = (src.description || '').replace(/</g,'&lt;');
+    if (desc.length > 90) desc = desc.slice(0, 90) + '…';
+    return [
+      '<div style="margin-top:8px;">',
+        '<a href="' + src.link.replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" style="font-size:12px;color:var(--acc);text-decoration:underline;font-weight:600;">· ' + (src.title || '').replace(/</g,'&lt;') + '</a>',
+        (desc ? '<div style="font-size:11px;color:var(--mut);line-height:1.5;margin:2px 0 0 10px;">' + desc + '</div>' : ''),
+      '</div>'
+    ].join('');
   }).join('');
 
   c.innerHTML = [
@@ -176,7 +183,7 @@ function newsRenderTopicDetail(t, idx) {
       '<div style="font-size:16px;font-weight:700;color:var(--txt);margin:8px 0 6px;">' + (t.title || '').replace(/</g,'&lt;') + '</div>',
       '<div style="font-size:12px;color:var(--mut);margin-bottom:10px;">' + (t.keywords || '').replace(/</g,'&lt;') + '</div>',
       '<div style="font-size:13px;color:var(--txt);line-height:1.6;margin-bottom:10px;">' + (t.reason || '').replace(/</g,'&lt;') + '</div>',
-      sources,
+      (sources ? '<div style="font-size:11px;font-weight:700;color:var(--mut);margin-top:12px;padding-top:10px;border-top:1px solid var(--bdr);">참고 기사</div>' + sources : ''),
       '<button class="btn btn-primary" style="margin-top:14px;width:100%;" onclick="newsUseTopicSuggestion(' + idx + ')">이 주제로 쓰기</button>',
     '</div>'
   ].join('');
