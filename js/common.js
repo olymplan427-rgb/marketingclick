@@ -34,11 +34,6 @@ function showPage(id) {
     if (imgSubnav) imgSubnav.style.display = 'none';
     document.querySelectorAll('#sidebar-subnav-image .sidebar-subitem').forEach(function(i) { i.classList.remove('active'); });
   }
-  // 블로그 서브메뉴는 블로그 계열이 아닐 때 닫기
-  if (id !== 'blog' && id !== 'blog-history' && id !== 'blog-news') {
-    var blogSubnav = document.getElementById('sidebar-subnav-blog');
-    if (blogSubnav) blogSubnav.style.display = 'none';
-  }
   if (id === 'list' || id === 2) {
     document.getElementById('page-2').classList.add('active');
     var navGroup = document.getElementById('nav-image-group');
@@ -67,10 +62,6 @@ function showPage(id) {
     p2render();
   } else if (id === 'blog' || id === 'blog-history' || id === 'blog-news') {
     document.getElementById('page-blog').classList.add('active');
-    var navBlog = document.getElementById('nav-blog');
-    if (navBlog) navBlog.classList.add('active');
-    var blogSubnavOpen = document.getElementById('sidebar-subnav-blog');
-    if (blogSubnavOpen) blogSubnavOpen.style.display = '';
     var navWrite = document.getElementById('nav-blog-write');
     var navHistory = document.getElementById('nav-blog-history');
     var navNews = document.getElementById('nav-blog-news');
@@ -305,6 +296,20 @@ function hideLoginOverlay() {
   var nameEl = document.getElementById('login-user-name');
   var auth = getUserAuth();
   if (nameEl && auth) nameEl.textContent = auth.name + (auth.academy ? ' · ' + auth.academy : '');
+  maybeShowBetaIntro();
+}
+
+// ── 베타 시작 안내 모달 — "다시 보지 않기" 체크 시 계정별로 재노출 안 함 ──
+function maybeShowBetaIntro() {
+  if (localStorage.getItem(_authKey('beta_intro_dismissed')) === '1') return;
+  var el = document.getElementById('beta-intro-overlay');
+  if (el) el.style.display = 'flex';
+}
+function closeBetaIntro() {
+  var chk = document.getElementById('beta-intro-dont-show');
+  if (chk && chk.checked) localStorage.setItem(_authKey('beta_intro_dismissed'), '1');
+  var el = document.getElementById('beta-intro-overlay');
+  if (el) el.style.display = 'none';
 }
 function initLoginGate() {
   _checkAutoLogout();
