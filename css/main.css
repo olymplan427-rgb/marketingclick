@@ -400,6 +400,23 @@ canvas{display:block;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.15);cu
 .ms-modal-close:hover{background:#f3f4f6;color:var(--txt);}
 .ms-modal-body{padding:16px 20px;overflow-y:auto;}
 
+/* ── 베타 시작 안내 모달 ── */
+.beta-intro-card{position:relative;width:400px;max-width:90vw;max-height:90vh;overflow-y:auto;background:#fff;border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.10),0 4px 8px rgba(0,0,0,.04);padding:32px 28px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;}
+.beta-intro-close{position:absolute;top:16px;right:16px;width:32px;height:32px;border-radius:8px;border:1px solid var(--bdr);background:#fff;color:var(--mut);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.beta-intro-close:hover{background:var(--hover);}
+.beta-intro-badge{font-size:11px;font-weight:800;color:#fff;background:var(--acc);padding:4px 14px;border-radius:99px;letter-spacing:.04em;}
+.beta-intro-icon{width:56px;height:56px;border-radius:50%;background:var(--acc-light);display:flex;align-items:center;justify-content:center;font-size:26px;margin-top:4px;}
+.beta-intro-title{font-size:17px;font-weight:800;color:var(--heading);letter-spacing:-.01em;}
+.beta-intro-sub{font-size:13px;color:var(--mut);line-height:1.6;margin-top:-6px;}
+.beta-intro-highlight{width:100%;display:flex;align-items:flex-start;gap:10px;background:var(--acc-light);border-radius:10px;padding:12px 14px;text-align:left;}
+.beta-intro-highlight-icon{font-size:18px;flex-shrink:0;}
+.beta-intro-highlight-title{font-size:13px;font-weight:700;color:var(--acc);}
+.beta-intro-highlight-desc{font-size:12px;color:var(--mut);margin-top:2px;line-height:1.5;}
+.beta-intro-list{width:100%;display:flex;flex-direction:column;gap:6px;text-align:left;}
+.beta-intro-list-item{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--txt);line-height:1.5;}
+.beta-intro-check{color:#1aae39;font-weight:800;flex-shrink:0;}
+.beta-intro-dont-show{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mut);cursor:pointer;}
+
 /* ── MOBILE ── */
 @media(max-width:720px){
   body{flex-direction:column;height:auto;overflow:auto;}
