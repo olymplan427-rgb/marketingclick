@@ -11,7 +11,9 @@
 // 나중에 blog-tracker의 로그인 세션과 연동할 것. 조회기간(현재 이번달 고정)도 재검토 필요.
 
 const CACHE_DAYS = 7;
-const GITHUB_WORKFLOW_FILE = "monitor-collect.yml";
+// GITHUB_OWNER/GITHUB_REPO는 wrangler.toml [vars]에서 설정 — naver-cafe-keyword-monitor 레포를 사용
+// (Gemini/Claude API 키가 이미 그 레포 Secrets에 등록되어 있어 재입력 불필요, 2026-08-31)
+const GITHUB_WORKFLOW_FILE = "ondemand-collect.yml";
 const GITHUB_REF = "main";
 
 function jsonResponse(data, status = 200) {
