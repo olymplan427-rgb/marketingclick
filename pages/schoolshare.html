@@ -30,12 +30,30 @@
       <div class="canvas-header">
         <div class="canvas-header-left">
           <div class="canvas-title">내 학교 목록</div>
-          <div class="canvas-desc">왼쪽에서 학교를 검색해 추가한 뒤 학년별 학원생 수를 입력하세요</div>
+          <div class="canvas-desc" id="ss-tab-desc">왼쪽에서 학교를 검색해 추가한 뒤 점유율을 비교하세요</div>
         </div>
-        <button class="btn btn-primary" onclick="ssSaveData()">저장하기</button>
+        <div style="display:flex; gap:8px;">
+          <div class="mon-pill active-date" id="ss-tab-btn-compare" onclick="ssShowTab('compare')">비교</div>
+          <div class="mon-pill" id="ss-tab-btn-trend" onclick="ssShowTab('trend')">월별추이</div>
+          <div class="mon-pill" id="ss-tab-btn-monthly" onclick="ssShowTab('monthly')">재원생입력</div>
+        </div>
       </div>
-      <div style="padding:20px 24px;" id="ss-schools-container">
-        <div class="mon-empty-right">← 왼쪽에서 학교를 검색해 추가해보세요</div>
+
+      <div style="padding:20px 24px;" id="ss-compare-view">
+        <div id="ss-schools-container">
+          <div class="empty-state">
+            <div class="empty-state-title">아직 추가한 학교가 없습니다</div>
+            <div class="empty-state-desc">왼쪽에서 학교를 검색해 추가해보세요</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:20px 24px; display:none;" id="ss-monthly-view">
+        <div id="ss-monthly-container"></div>
+      </div>
+
+      <div style="padding:20px 24px; display:none;" id="ss-trend-view">
+        <div id="ss-trend-container"></div>
       </div>
     </div>
   </div><!-- /page-schoolshare -->
