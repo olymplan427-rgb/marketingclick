@@ -195,7 +195,7 @@ canvas{display:block;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.15);cu
 /* ── 블로그 페이지 ── */
 #page-blog{flex:1;flex-direction:row;overflow:hidden;height:100%;}
 .blogtab{display:flex;flex-direction:column;flex:1;height:100%;overflow:hidden;}
-.blog-left{width:380px;min-width:360px;background:#fff;border-right:1px solid var(--bdr);overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;flex-shrink:0;transition:width .2s,min-width .2s;}
+.blog-left{width:380px;min-width:360px;margin:16px 0 16px 24px;background:#fff;border:1px solid var(--bdr);border-radius:12px;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;flex-shrink:0;transition:width .2s,min-width .2s;}
 .blog-left::-webkit-scrollbar{width:4px;}
 .blog-left::-webkit-scrollbar-track{background:transparent;}
 .blog-left::-webkit-scrollbar-thumb{background:#e5e7eb;border-radius:99px;}
