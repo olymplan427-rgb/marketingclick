@@ -2012,3 +2012,109 @@ function monNavToDate(val) {
   monRenderList();
   if (monSelected) monRenderDetail(monSelected);
 }
+
+// ── 경쟁학원 온디맨드 조회 (프로토타입, 2026-08-31) ──────────────────────
+// 아래 MON_DATA는 매월 정기수집된 하드코딩 데이터고, 이 기능은 사용자가 원하는 학원명을
+// 그때그때 직접 조회하는 별도 경로다. GitHub Actions가 네이버 카페를 실제로 수집·AI분석하는
+// 구조라 완료까지 수 분 걸릴 수 있음 — monitor-tracker Worker가 job을 만들고 폴링으로 결과를 받는다.
+// TODO: 조회기간이 현재 "이번 달"로 고정되어 있어 월초엔 결과가 거의 없을 수 있음 — 추후 개선 필요.
+function monOndemandEsc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+async function monOndemandCall(action, payload) {
+  var cfg = getMonitorGasConfig();
+  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(모니터링 Worker 미설정)');
+  var res = await fetch(cfg.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ token: cfg.token, action: action }, payload))
+  });
+  var json = await res.json();
+  if (!json.ok) throw new Error(json.error || '알 수 없는 오류');
+  return json;
+}
+
+async function monOndemandQuery(btn) {
+  var keywordEl = document.getElementById('mon-ondemand-keyword');
+  var regionEl = document.getElementById('mon-ondemand-region');
+  var statusEl = document.getElementById('mon-ondemand-status');
+  var resultEl = document.getElementById('mon-ondemand-result');
+  var keyword = keywordEl ? keywordEl.value.trim() : '';
+  if (!keyword) { alert('학원명을 입력해주세요'); return; }
+
+  var auth = getUserAuth();
+  if (!auth) { alert('로그인이 필요합니다'); return; }
+
+  btn.disabled = true;
+  if (resultEl) resultEl.innerHTML = '';
+  if (statusEl) statusEl.textContent = '조회 요청 중...';
+
+  try {
+    var created = await monOndemandCall('createJob', {
+      userId: auth.id,
+      keyword: keyword,
+      region: regionEl ? regionEl.value.trim() : ''
+    });
+
+    if (created.cached) {
+      if (statusEl) statusEl.textContent = '캐시된 결과 사용';
+    } else {
+      if (statusEl) statusEl.textContent = '수집 중... (실제 네이버 카페를 뒤지는 중이라 수 분 걸릴 수 있습니다)';
+    }
+    monOndemandPoll(created.job_id, btn);
+  } catch (e) {
+    if (statusEl) statusEl.textContent = '';
+    alert('조회 요청 실패: ' + e.message);
+    btn.disabled = false;
+  }
+}
+
+async function monOndemandPoll(jobId, btn) {
+  var statusEl = document.getElementById('mon-ondemand-status');
+  try {
+    var data = await monOndemandCall('getJob', { job_id: jobId });
+
+    if (data.status === 'done') {
+      if (statusEl) statusEl.textContent = '완료: ' + data.results.length + '건';
+      monOndemandRender(data.results);
+      btn.disabled = false;
+      return;
+    }
+    if (data.status === 'error') {
+      if (statusEl) statusEl.textContent = '';
+      alert('수집 실패: ' + (data.error || '알 수 없는 오류'));
+      btn.disabled = false;
+      return;
+    }
+    if (statusEl) statusEl.textContent = '진행 중... (' + data.status + ')';
+    setTimeout(function () { monOndemandPoll(jobId, btn); }, 5000);
+  } catch (e) {
+    if (statusEl) statusEl.textContent = '';
+    alert('조회 실패: ' + e.message);
+    btn.disabled = false;
+  }
+}
+
+function monOndemandRender(results) {
+  var resultEl = document.getElementById('mon-ondemand-result');
+  if (!resultEl) return;
+
+  if (!results.length) {
+    resultEl.innerHTML = '<p style="font-size:13px;color:var(--mut);padding:10px 0;">이번 달 관련 게시글을 찾지 못했습니다.</p>';
+    return;
+  }
+
+  resultEl.innerHTML = results.map(function (r) {
+    var tags = (r.advantages || []).map(function (t) { return '<span class="tag" style="background:var(--acc-light);color:var(--acc);border-radius:4px;padding:2px 6px;margin-right:4px;font-size:11.5px;">👍 ' + monOndemandEsc(t) + '</span>'; }).join('') +
+      (r.disadvantages || []).map(function (t) { return '<span class="tag" style="background:#fdecea;color:#c0392b;border-radius:4px;padding:2px 6px;margin-right:4px;font-size:11.5px;">👎 ' + monOndemandEsc(t) + '</span>'; }).join('');
+    return '<div style="border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;margin:8px 0;background:#fff;">' +
+      '<a href="' + monOndemandEsc(r.article_url) + '" target="_blank" rel="noopener" style="font-weight:800;font-size:13.5px;color:var(--txt);text-decoration:none;">' + monOndemandEsc(r.title) + '</a>' +
+      '<div style="font-size:11.5px;color:var(--mut);margin:2px 0 6px;">' + monOndemandEsc(r.cafe_name) + ' · ' + monOndemandEsc(r.write_date) + ' · ' + monOndemandEsc(r.region) + ' · ' + monOndemandEsc(r.sentiment) + '</div>' +
+      '<div style="font-size:13px;color:var(--txt);margin-bottom:6px;">' + monOndemandEsc(r.summary) + '</div>' +
+      tags +
+      '</div>';
+  }).join('');
+}

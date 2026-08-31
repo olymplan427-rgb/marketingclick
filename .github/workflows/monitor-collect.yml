@@ -1,0 +1,52 @@
+name: On-demand competitor monitor collect
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: "mtt-monitor-tracker Worker가 발급한 job id"
+        required: true
+      keyword:
+        description: "검색할 학원명/키워드"
+        required: true
+      region:
+        description: "타겟 지역 (참고값)"
+        required: false
+        default: ""
+      callback_url:
+        description: "결과를 전송할 Worker 콜백 URL"
+        required: true
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: monitor-pipeline
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Run collect job
+        env:
+          CALLBACK_SECRET: ${{ secrets.MONITOR_CALLBACK_SECRET }}
+          AI_PROVIDER: ${{ vars.MONITOR_AI_PROVIDER }}
+          GEMINI_API_KEY_4468: ${{ secrets.GEMINI_API_KEY_4468 }}
+          GEMINI_API_KEY_SS: ${{ secrets.GEMINI_API_KEY_SS }}
+          GEMINI_API_KEY_KIM: ${{ secrets.GEMINI_API_KEY_KIM }}
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+        run: |
+          python collect_job.py \
+            --job-id "${{ github.event.inputs.job_id }}" \
+            --keyword "${{ github.event.inputs.keyword }}" \
+            --region "${{ github.event.inputs.region }}" \
+            --callback-url "${{ github.event.inputs.callback_url }}"

@@ -1,0 +1,9 @@
+requests==2.31.0
+beautifulsoup4==4.12.3
+python-dateutil==2.9.0
+pytz==2024.1
+playwright==1.48.0
+
+# AI 분석
+google-generativeai>=0.3.0
+anthropic>=0.39.0
