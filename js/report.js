@@ -272,7 +272,7 @@ function reportRender(region, trend, brands, patterns, insights, topics) {
   }
 
   resultEl.innerHTML =
-    '<div style="font-size:16px;font-weight:900;color:var(--txt);margin-bottom:16px;">' + reportEsc(region) + ' 수학학원 현황</div>' +
+    '<div class="blog-card" style="font-size:16px;font-weight:900;color:var(--txt);">' + reportEsc(region) + ' 수학학원 현황</div>' +
     section('① 언급량 추이 (네이버 블로그, 월별)', trendSection) +
     section('② 자주 언급되는 학원 (' + brands.length + '건)', brandCards || '<p style="font-size:14px;color:var(--txt);">식별된 학원이 없습니다.</p>') +
     section('③ 콘텐츠 패턴', patternCards || '<p style="font-size:14px;color:var(--txt);">특별한 패턴이 발견되지 않았습니다.</p>') +
