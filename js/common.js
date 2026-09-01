@@ -116,6 +116,11 @@ function showPage(id) {
     document.getElementById('page-schoolshare').classList.add('active');
     var navSs = document.getElementById('nav-schoolshare');
     if (navSs) navSs.classList.add('active');
+  } else if (id === 'credit') {
+    document.getElementById('page-credit').classList.add('active');
+    var navCr = document.getElementById('nav-credit');
+    if (navCr) navCr.classList.add('active');
+    if (typeof creditInit === 'function') creditInit();
   } else if (id === 'feedback') {
     document.getElementById('page-feedback').classList.add('active');
     var navFb = document.getElementById('nav-feedback');
@@ -439,6 +444,22 @@ async function getCreditStatus() {
     body: JSON.stringify({ action: 'creditStatus', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId() })
   });
   return json.ok ? json : null;
+}
+
+// 크레딧 사용 내역(크레딧 페이지 전용, 본인 것만 최신순)
+async function getCreditHistory(n) {
+  var auth = getUserAuth();
+  if (!auth) return [];
+  var cfg = getGasConfig();
+  if (!cfg.url || !cfg.token) return [];
+  try {
+    var json = await _fetchGasJson(cfg.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'creditHistory', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), n: n || 50 })
+    });
+    return json.ok ? (json.items || []) : [];
+  } catch (e) { return []; }
 }
 
 // 본인이 작성한 글만 조회 (히스토리 탭 전용 — gasGetRecentPosts는 유사글 검사용으로 전체 공용 유지)

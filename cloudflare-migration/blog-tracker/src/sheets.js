@@ -108,3 +108,15 @@ export async function getSheetRowCount(env, sheetName) {
   const sheet = (json.sheets || []).find((s) => s.properties.title === sheetName);
   return sheet ? sheet.properties.gridProperties.rowCount : 0;
 }
+
+// 시트 탭이 아직 없으면(신규 기능이라 아무도 만든 적 없는 경우 등) 자동으로 만든다 —
+// getValues/appendRow가 존재하지 않는 탭에 대해 그냥 실패하는 문제를 근본적으로 없앰.
+export async function ensureSheetExists(env, sheetName) {
+  const rowCount = await getSheetRowCount(env, sheetName);
+  if (rowCount > 0) return; // 이미 존재
+  await sheetsFetch(env, ':batchUpdate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: [{ addSheet: { properties: { title: sheetName } } }] })
+  });
+}
