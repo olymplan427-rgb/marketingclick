@@ -317,8 +317,17 @@ async function msFetchPosts(idx) {
 
   bodyEl.innerHTML = '<div class="blog-loading show"><span class="blog-spinner"></span>블로그 검색 중...</div>';
 
-  // 배경 확인(msRunBlogChecks)에서 이미 가져온 결과가 있으면 재요청하지 않고 재사용
+  // 배경 확인(msRunBlogChecks)에서 이미 가져온 결과가 있으면 재요청하지 않고 재사용 — 이 경우 실제
+  // 조회가 발생하지 않으므로 크레딧도 차감하지 않는다.
   var cached = msState.postsCache[placeId];
+  if (!cached) {
+    try {
+      await useCredit('mapsearch_search');
+    } catch(ce) {
+      bodyEl.innerHTML = '<div class="hint-text">' + msEsc(ce.message || '크레딧 확인에 실패했습니다.') + '</div>';
+      return;
+    }
+  }
   var result = cached ? { ok: true, posts: cached } : await msRequestAcademyPosts(placeId, cfg);
 
   if (!result.ok) {

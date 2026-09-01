@@ -411,6 +411,36 @@ async function claudeQuotaCheck() {
   return json; // { count, limit, remaining }
 }
 
+// 크레딧 시스템(2026-09) — 기능 실행 직전에 호출해 차감. 실패 시 throw(메시지는 잔여/필요 크레딧 안내문).
+// {ok, remaining, monthlyCredit, unlimited} 형태로 반환.
+async function useCredit(actionKey) {
+  var auth = getUserAuth();
+  if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
+  var cfg = getGasConfig();
+  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  var json = await _fetchGasJson(cfg.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'useCredit', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), actionKey: actionKey })
+  });
+  if (!json.ok) throw new Error(json.error || '크레딧 사용에 실패했습니다.');
+  return json;
+}
+
+// 설정(계정) 화면 표시용 — 차감 없이 잔여 크레딧만 조회.
+async function getCreditStatus() {
+  var auth = getUserAuth();
+  if (!auth) return null;
+  var cfg = getGasConfig();
+  if (!cfg.url || !cfg.token) return null;
+  var json = await _fetchGasJson(cfg.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'creditStatus', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId() })
+  });
+  return json.ok ? json : null;
+}
+
 // 본인이 작성한 글만 조회 (히스토리 탭 전용 — gasGetRecentPosts는 유사글 검사용으로 전체 공용 유지)
 async function gasGetMyPosts(n) {
   var auth = getUserAuth();
