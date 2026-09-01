@@ -229,9 +229,11 @@ function setLoginOverlayMode(mode) {
   var toLogin = document.getElementById('login-toggle-to-login');
   var errEl = document.getElementById('login-error');
   if (titleEl) titleEl.textContent = isRegister ? '마케팅딸깍 회원가입' : '마케팅딸깍 로그인';
-  if (subEl) subEl.textContent = isRegister ? '원하는 아이디/비밀번호를 만들어주세요' : '원하는 아이디/비밀번호로 로그인하세요';
-  if (fieldsEl) fieldsEl.style.display = isRegister ? 'block' : 'none';
-  if (pwConfirmFieldEl) pwConfirmFieldEl.style.display = isRegister ? 'block' : 'none';
+  if (subEl) subEl.textContent = isRegister ? '원하는 아이디/비밀번호를 만들어주세요' : '클릭 한 번으로 학원 마케팅을 준비하세요';
+  if (fieldsEl) fieldsEl.style.display = isRegister ? 'flex' : 'none';
+  if (pwConfirmFieldEl) pwConfirmFieldEl.style.display = isRegister ? 'flex' : 'none';
+  var rememberRow = document.getElementById('login-remember-row');
+  if (rememberRow) rememberRow.style.display = isRegister ? 'none' : 'flex';
   if (btnEl) btnEl.textContent = isRegister ? '가입하고 시작하기' : '로그인';
   if (toReg) toReg.style.display = isRegister ? 'none' : 'block';
   if (toLogin) toLogin.style.display = isRegister ? 'block' : 'none';
