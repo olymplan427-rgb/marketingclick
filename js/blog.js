@@ -676,7 +676,7 @@ function blogRenderImages(images) {
   var c = document.getElementById('blog-img-grid');
   if (!c) return;
   if (!images || !images.length) { c.innerHTML = '<p style="color:#9aa1ad;font-size:13px;">생성된 이미지 정보가 없습니다.</p>'; return; }
-  c.innerHTML = images.map(function(img, i) {
+  var cards = images.map(function(img, i) {
     var secIdx = (typeof img.section_index === 'number') ? img.section_index : i;
     var sections = (blogState.result && blogState.result.sections) || [];
     var secHeading = sections[secIdx] ? sections[secIdx].heading : '';
@@ -692,11 +692,11 @@ function blogRenderImages(images) {
         + '<div class="bimg-actions" id="bimg-actions-' + i + '">'
           + '<button class="blog-copy-btn" onclick="blogCopyQuery(this,' + i + ')">검색어 복사</button>'
           + '<a class="bimg-gen-btn" href="' + googleUrl + '" target="_blank" rel="noopener">구글 이미지 검색 (사용권 필터)</a>'
-          + '<button class="bimg-regen-btn" onclick="blogRegenImageQuery(this,' + i + ')">검색어 재생성</button>'
         + '</div>'
       + '</div>'
       + '</div>';
   }).join('');
+  c.innerHTML = cards + '<div class="bimg-license-note">⚠️ "사용권 필터"는 구글이 자동 분류한 결과라 100% 정확하지 않습니다. 다운로드 전 이미지 출처 페이지에서 실제 라이선스(상업적 사용 가능 여부, 출처 표시 필요 여부)를 반드시 직접 확인한 뒤 사용하세요.</div>';
 }
 
 function blogCopyQuery(btn, idx) {
@@ -708,36 +708,6 @@ function blogCopyQuery(btn, idx) {
     btn.textContent = '복사됨';
     setTimeout(function() { btn.textContent = old; }, 1500);
   });
-}
-
-async function blogRegenImageQuery(btn, idx) {
-  var images = blogState.result && blogState.result.images;
-  if (!images || !images[idx]) return;
-  var img = images[idx];
-  var result = blogState.result;
-  btn.disabled = true; btn.textContent = '생성 중...';
-  var secIdx = (typeof img.section_index === 'number') ? img.section_index : idx;
-  var sec = (result.sections || [])[secIdx] || {};
-  var systemPrompt = '당신은 블로그 본문에 어울리는 이미지를 구글 이미지 검색(사용권 필터)에서 찾아주는 검색어 전문가입니다.\n아래 블로그 섹션 내용을 바탕으로 새로운 검색어를 생성하세요.\n\n반드시 아래 JSON 형식으로만 응답하세요:\n{"search_query":"짧고 구체적인 한국어 검색어 2~4단어 (추상적 단어 대신 눈에 보이는 구체적 장면)","description":"이 이미지가 표현하는 내용을 한국어로 2~3문장"}';
-  var userContent = '블로그 제목: ' + (result.title || '') + '\n'
-    + '해당 섹션 소제목: ' + (sec.heading || '') + '\n'
-    + '해당 섹션 본문: ' + (sec.body || '').substring(0, 300) + '\n'
-    + '\n\n이전 검색어와 다른 방향으로 새 검색어를 생성해주세요.';
-  try {
-    var raw = await blogCall(systemPrompt, userContent, 400);
-    var parsed = blogParseJson(raw);
-    if (!parsed.search_query) throw new Error('검색어 생성 실패');
-    blogState.result.images[idx].search_query = parsed.search_query;
-    if (parsed.description) blogState.result.images[idx].description = parsed.description;
-    blogRenderImages(blogState.result.images);
-    btn.textContent = '완료';
-    setTimeout(function() { btn.textContent = '검색어 재생성'; }, 2000);
-  } catch(e) {
-    alert('오류: ' + e.message);
-    btn.textContent = '검색어 재생성';
-  } finally {
-    btn.disabled = false;
-  }
 }
 
 // 유사 글 찾기 — 주제·키워드·태그 토큰 매칭으로 점수 계산
