@@ -83,12 +83,16 @@ async function findUser(env, id) {
   return null;
 }
 
+const SIGNUP_CREDIT = 500;
+
 async function registerUser(env, id, password, name, academy, site) {
   if (!id || !password || !name || !academy) return { ok: false, error: '모든 항목을 입력하세요.' };
   if (site === 'dev') return { ok: false, error: '이 주소는 개발용입니다. 정식 주소에서 가입해주세요.' };
   const existing = await findUser(env, id);
   if (existing) return { ok: false, error: '이미 사용 중인 아이디입니다.' };
-  await appendRow(env, USERS_SHEET, [id, password, name, academy, '사용', '']); // 월크레딧(G)은 비워둠 = 무제한
+  const currentMonth = monthKST();
+  await appendRow(env, USERS_SHEET, [id, password, name, academy, '사용', '', SIGNUP_CREDIT, SIGNUP_CREDIT, currentMonth]);
+  await logCreditEvent(env, id, '충전', '신규 가입 지급', SIGNUP_CREDIT, SIGNUP_CREDIT);
   return { ok: true };
 }
 

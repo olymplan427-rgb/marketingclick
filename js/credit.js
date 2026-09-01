@@ -24,7 +24,7 @@ async function creditInit() {
       if (unitEl) unitEl.style.display = 'none';
     } else {
       balEl.textContent = status.remaining;
-      if (unitEl) { unitEl.style.display = ''; unitEl.textContent = '/ ' + status.monthlyCredit + ' 크레딧'; }
+      if (unitEl) { unitEl.style.display = ''; unitEl.textContent = '크레딧'; }
     }
   } catch (e) {
     balEl.textContent = '오류';
