@@ -446,6 +446,7 @@ canvas{display:block;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.15);cu
 .guide-step-shot{width:320px;flex-shrink:0;border:1px solid var(--bdr);border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.06);display:block;}
 .guide-step-text{flex:1;min-width:220px;font-size:13.5px;color:var(--txt);line-height:1.7;padding-top:6px;}
 .guide-step-text b{color:var(--heading);}
+.guide-num{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--acc);color:#fff;font-size:11px;font-weight:900;margin-right:6px;flex-shrink:0;}
 
 /* ── 홈 페이지 ── */
 #page-home{flex:1;overflow-y:auto;}
