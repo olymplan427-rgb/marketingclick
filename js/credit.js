@@ -6,6 +6,7 @@ function creditEsc(str) {
 }
 
 async function creditInit() {
+  if (typeof creditUpdateBadge === 'function') creditUpdateBadge();
   var balEl = document.getElementById('credit-balance-num');
   var unitEl = document.getElementById('credit-balance-unit');
   var bodyEl = document.getElementById('credit-history-body');
@@ -55,4 +56,17 @@ async function creditInit() {
 
 function creditRefresh() {
   creditInit();
+}
+
+// 사이드바 "크레딧" 메뉴 옆 잔액 뱃지 — 로그인 직후·크레딧 사용 직후에도 갱신되도록
+// hideLoginOverlay()/useCredit()(둘 다 common.js)에서 호출한다.
+async function creditUpdateBadge() {
+  var badge = document.getElementById('nav-credit-badge');
+  if (!badge || typeof getUserAuth !== 'function' || !getUserAuth()) return;
+  try {
+    var status = await getCreditStatus();
+    if (!status || status.unlimited) { badge.style.display = 'none'; return; }
+    badge.textContent = status.remaining;
+    badge.style.display = '';
+  } catch (e) { badge.style.display = 'none'; }
 }

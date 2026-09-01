@@ -10,35 +10,37 @@
       </div>
     </div>
 
-    <div class="tool-section" style="display:flex;align-items:center;justify-content:space-between;">
-      <div>
-        <div class="sec-title" style="margin-bottom:6px;">현재 잔액</div>
-        <div style="display:flex;align-items:baseline;gap:8px;">
-          <span id="credit-balance-num" style="font-size:32px;font-weight:900;color:var(--acc);">-</span>
-          <span id="credit-balance-unit" style="font-size:14px;color:var(--mut);">크레딧</span>
+    <div class="credit-content">
+      <div class="tool-section" style="flex-direction:row;align-items:center;justify-content:space-between;">
+        <div>
+          <div class="sec-title" style="margin-bottom:6px;">현재 잔액</div>
+          <div style="display:flex;align-items:baseline;gap:8px;">
+            <span id="credit-balance-num" style="font-size:32px;font-weight:900;color:var(--acc);">-</span>
+            <span id="credit-balance-unit" style="font-size:14px;color:var(--mut);">크레딧</span>
+          </div>
         </div>
+        <button class="btn" onclick="creditRefresh()">새로고침</button>
       </div>
-      <button class="btn" onclick="creditRefresh()">새로고침</button>
-    </div>
 
-    <div class="tool-section" style="margin-top:16px;">
-      <div class="sec-title">사용 내역</div>
-      <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead>
-            <tr style="border-bottom:1px solid var(--bdr);color:var(--mut);text-align:left;">
-              <th style="padding:10px;">일시</th>
-              <th style="padding:10px;">구분</th>
-              <th style="padding:10px;">사용 항목</th>
-              <th style="padding:10px;text-align:right;">증감</th>
-              <th style="padding:10px;text-align:right;">잔액</th>
-            </tr>
-          </thead>
-          <tbody id="credit-history-body"></tbody>
-        </table>
-        <div class="empty-state" id="credit-history-empty" style="display:none;">
-          <div class="empty-state-title">사용 내역이 없습니다</div>
-          <div class="empty-state-desc">기능을 사용하면 여기에 기록됩니다</div>
+      <div class="tool-section">
+        <div class="sec-title">사용 내역</div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--bdr);color:var(--mut);text-align:left;">
+                <th style="padding:10px;">일시</th>
+                <th style="padding:10px;">구분</th>
+                <th style="padding:10px;">사용 항목</th>
+                <th style="padding:10px;text-align:right;">증감</th>
+                <th style="padding:10px;text-align:right;">잔액</th>
+              </tr>
+            </thead>
+            <tbody id="credit-history-body"></tbody>
+          </table>
+          <div class="empty-state" id="credit-history-empty" style="display:none;">
+            <div class="empty-state-title">사용 내역이 없습니다</div>
+            <div class="empty-state-desc">기능을 사용하면 여기에 기록됩니다</div>
+          </div>
         </div>
       </div>
     </div>

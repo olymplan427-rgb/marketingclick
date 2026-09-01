@@ -302,6 +302,7 @@ function hideLoginOverlay() {
   var auth = getUserAuth();
   if (nameEl && auth) nameEl.textContent = auth.name + (auth.academy ? ' · ' + auth.academy : '');
   maybeShowBetaIntro();
+  if (typeof creditUpdateBadge === 'function') creditUpdateBadge();
 }
 
 // ── 베타 시작 안내 모달 — "다시 보지 않기" 체크 시 계정별로 재노출 안 함 ──
@@ -429,6 +430,7 @@ async function useCredit(actionKey) {
     body: JSON.stringify({ action: 'useCredit', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), actionKey: actionKey })
   });
   if (!json.ok) throw new Error(json.error || '크레딧 사용에 실패했습니다.');
+  if (typeof creditUpdateBadge === 'function') creditUpdateBadge();
   return json;
 }
 
