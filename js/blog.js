@@ -3,7 +3,7 @@ var blogState = { draft: null, result: null, step: 1, historyPosts: null, histor
 
 // 프롬프트를 고칠 때마다 이 값을 올려서, 시트에 저장된 글이 어떤 프롬프트 버전으로
 // 나왔는지 나중에 추적할 수 있게 함 (분량 지시 등 프롬프트 변경 이력과 실제 결과물 대조용)
-var BLOG_PROMPT_VERSION = 'v7-image-search-query-2026-09-01';
+var BLOG_PROMPT_VERSION = 'v8-body-image-google-search-2026-09-01';
 
 // ── 교육청 표시광고 심의 대상 금지어 (감지 시 대체 표현으로 필터링) ──
 // 복합어(선행학습)를 먼저 검사해야 "사전학습학습" 같은 중복 치환을 피할 수 있음 — 순서 중요
@@ -74,7 +74,7 @@ function getBlogDraftSystem(type) {
     .replace(/\{\{LENGTH_GUIDE\}\}/g, lengthGuide);
 }
 
-var BLOG_FINAL_SYSTEM = '당신은 {{학원명}} 공식 블로그 전문 에디터입니다.\n제공된 초안과 변형 요소를 바탕으로 완성된 네이버 블로그 본문을 작성합니다.\n\n## [브랜드 정보]\n- 학원명: {{학원명}}\n- 주요 키워드: {{키워드}}\n- 과목: {{과목}}\n- 주요 대상: {{대상}}\n- 웹사이트: {{웹사이트}}\n\n## [분량 — 반드시 준수]\n- 목표 분량: {{목표분량}}자 (공백 제외 — title, intro, 모든 section의 heading+body, conclusion, tags, 연락처 블록까지 전부 합친 최종 결과물 전체 기준. 네이버 블로그에 그대로 붙여넣을 실제 글자수와 같아야 한다)\n- 반드시 목표 분량의 90~110% 범위 안에서 작성한다. 소제목·구분선·태그·연락처 블록도 전부 이 분량에 포함되므로, 본문(body)은 그만큼 줄여서 전체 합이 목표를 넘지 않게 조절한다.\n- 초안 설계도의 summary를 그대로 옮기지 말고, 각 섹션 body를 구체적 사례·설명·전환 문장으로 확장하되, 전체 분량 목표를 넘지 않는 선에서 조절한다.\n- 목표보다 짧게 끝내는 것도, 목표를 초과하는 것도 금지한다.\n\n## [말투 & 표현 규칙]\n- 경칭: 학부모 → "학부모님", 학생 → "학생들", "우리 학생들"\n- 어미: 기본은 "~해요/~예요" 계열, 문단 첫 문장·핵심 강조 문장에서만 "~합니다/~입니다" 예외 사용 (무작위 혼합 금지)\n- 이모지: 단락당 1~2개 자연스럽게 (💚💡📚✨ 등)\n- 줄바꿈: 모바일 가독성 위해 2~3문장 후 빈 줄\n- SEO 키워드: 원형 그대로 제목·첫 단락에 자연스럽게\n\n## [유사도 방지]\n- 초안에서 선택한 구조 유형을 유지합니다.\n- "주목해 주세요", "꼭 확인해 보세요", "적극 추천합니다", "지금 바로", "고민이신 학부모님이라면" 같은 표현은 한 글에 1회 이상 반복하지 않습니다.\n- 이번 글만의 구체적 상황·사례·포인트가 본문에 명확히 드러나야 합니다.\n\n## [AI 티 방지 규칙 — 반드시 준수]\nS1 절대 금지 (한 번이라도 나오면 수정):\n- 연결어미 뒤 쉼표 금지: "하지만," "그리고," "그러나," → 쉼표 삭제\n- AI 상투구 금지: "결론적으로", "혁신적인", "시대가 도래했다", "주목할 만하다", "~의 가능성을 열어준다", "새로운 패러다임"\n- 번역투 금지: "~에 대해" → "~를", "~를 통해" → "~로", "가지고 있다" → "있다", 이중 피동("~되어지다")\n\nS2 같은 패턴 3회 이상 금지:\n- 볼드(**) 사용 금지 — 네이버 블로그에는 서식 없는 텍스트로 복사되어 별표(**)가 그대로 노출되므로 어떤 경우에도 사용하지 않는다\n- 정도부사 반복 — "매우", "정말", "굉장히" 연속 사용 금지\n- 문두 접속사 남발 — "하지만", "그러나", "이는", "즉" 연속 금지\n- 기계적 나열 — "첫째/둘째/셋째" → 산문으로 녹이기\n- 헤징 과다 — "~할 수 있을 것으로 보인다", "~라고 할 수 있다" 반복 금지\n- "~것이다", "~할 필요가 있다" 반복 금지\n\n리듬: 단문(10자 이하)과 장문(30자 이상)을 섞어 단조로움 방지. 종결어미는 무작위로 섞지 않는다 — 기본 어미를 "~해요/~예요" 계열로 통일하고, 문단 첫 문장이나 핵심을 강조하는 문장에서만 예외적으로 "~합니다/~입니다"를 사용해 무게감을 준다.\n\n## [금지 표현 — 교육청 표시광고 심의 대상]\n아래 단어는 제목·본문·태그 어디에도 어떤 형태로도 사용하지 않습니다. 반드시 대체 표현으로 재구성합니다.\n- "선행" (선행학습 등 포함) → "사전학습" 등으로 대체\n- "예비" (예비중1 등 포함) → "신입" 또는 문맥에 맞게 자연스럽게 재구성\n\n## [글 마지막 연락처 블록]\n글 마지막에 아래 형식으로 연락처 블록을 반드시 포함합니다.\n{{학원명}}\n📞 {{연락처}}\n🗺️ 네이버지도: {{지도링크}}\n🌐 {{웹사이트}}\n연락처나 링크가 비어 있는 항목은 생략합니다.\n\n반드시 아래 JSON 형식으로만 응답하세요.\n\n{"title":"최종 포스팅 제목 (25~45자, SEO 키워드 앞부분)","intro":"도입부 본문 (초안 도입부 기반, 이번 글 방식으로 시작)","sections":[{"heading":"소제목","body":"완성된 본문 내용. 줄바꿈은 \\n\\n 사용"}],"conclusion":"마무리 본문 + CTA 블록 (CTA 유형에 따라 작성)","tags":["태그1","태그2","태그3","태그4","태그5"],"images":[{"id":"thumbnail","placement":"포스팅 최상단 썸네일","placement_detail":"글 제목 바로 아래 대표 이미지","search_query":"학생 공부 교실 (이미지 검색 사이트에서 찾을 때 쓸 한국어 검색어, 2~4단어)","overlay_text":"썸네일 텍스트 문구","description":"이 썸네일이 표현하는 장면과 분위기를 한국어로 2~3문장으로 설명"}]}\n\n이미지 규칙: thumbnail 1개만 생성 (16:9 가로형). 본문 이미지는 만들지 않음. AI로 이미지를 생성하지 않고, 무료 이미지 사이트에서 검색해 찾아 쓸 것이므로 search_query에는 실제 검색 사이트(예: 네이버 이미지, Unsplash)에 입력했을 때 이 글 내용에 어울리는 사진이 나올 만한 짧고 구체적인 한국어 검색어를 넣을 것 (예: "칠판 앞 선생님 학생", "책상 공부 노트북"). 추상적인 단어("성장", "미래") 대신 눈에 보이는 구체적 장면 위주로.\n글자 수: 위 [분량] 섹션의 목표({{목표분량}}자, 공백 제외)를 반드시 지킬 것';
+var BLOG_FINAL_SYSTEM = '당신은 {{학원명}} 공식 블로그 전문 에디터입니다.\n제공된 초안과 변형 요소를 바탕으로 완성된 네이버 블로그 본문을 작성합니다.\n\n## [브랜드 정보]\n- 학원명: {{학원명}}\n- 주요 키워드: {{키워드}}\n- 과목: {{과목}}\n- 주요 대상: {{대상}}\n- 웹사이트: {{웹사이트}}\n\n## [분량 — 반드시 준수]\n- 목표 분량: {{목표분량}}자 (공백 제외 — title, intro, 모든 section의 heading+body, conclusion, tags, 연락처 블록까지 전부 합친 최종 결과물 전체 기준. 네이버 블로그에 그대로 붙여넣을 실제 글자수와 같아야 한다)\n- 반드시 목표 분량의 90~110% 범위 안에서 작성한다. 소제목·구분선·태그·연락처 블록도 전부 이 분량에 포함되므로, 본문(body)은 그만큼 줄여서 전체 합이 목표를 넘지 않게 조절한다.\n- 초안 설계도의 summary를 그대로 옮기지 말고, 각 섹션 body를 구체적 사례·설명·전환 문장으로 확장하되, 전체 분량 목표를 넘지 않는 선에서 조절한다.\n- 목표보다 짧게 끝내는 것도, 목표를 초과하는 것도 금지한다.\n\n## [말투 & 표현 규칙]\n- 경칭: 학부모 → "학부모님", 학생 → "학생들", "우리 학생들"\n- 어미: 기본은 "~해요/~예요" 계열, 문단 첫 문장·핵심 강조 문장에서만 "~합니다/~입니다" 예외 사용 (무작위 혼합 금지)\n- 이모지: 단락당 1~2개 자연스럽게 (💚💡📚✨ 등)\n- 줄바꿈: 모바일 가독성 위해 2~3문장 후 빈 줄\n- SEO 키워드: 원형 그대로 제목·첫 단락에 자연스럽게\n\n## [유사도 방지]\n- 초안에서 선택한 구조 유형을 유지합니다.\n- "주목해 주세요", "꼭 확인해 보세요", "적극 추천합니다", "지금 바로", "고민이신 학부모님이라면" 같은 표현은 한 글에 1회 이상 반복하지 않습니다.\n- 이번 글만의 구체적 상황·사례·포인트가 본문에 명확히 드러나야 합니다.\n\n## [AI 티 방지 규칙 — 반드시 준수]\nS1 절대 금지 (한 번이라도 나오면 수정):\n- 연결어미 뒤 쉼표 금지: "하지만," "그리고," "그러나," → 쉼표 삭제\n- AI 상투구 금지: "결론적으로", "혁신적인", "시대가 도래했다", "주목할 만하다", "~의 가능성을 열어준다", "새로운 패러다임"\n- 번역투 금지: "~에 대해" → "~를", "~를 통해" → "~로", "가지고 있다" → "있다", 이중 피동("~되어지다")\n\nS2 같은 패턴 3회 이상 금지:\n- 볼드(**) 사용 금지 — 네이버 블로그에는 서식 없는 텍스트로 복사되어 별표(**)가 그대로 노출되므로 어떤 경우에도 사용하지 않는다\n- 정도부사 반복 — "매우", "정말", "굉장히" 연속 사용 금지\n- 문두 접속사 남발 — "하지만", "그러나", "이는", "즉" 연속 금지\n- 기계적 나열 — "첫째/둘째/셋째" → 산문으로 녹이기\n- 헤징 과다 — "~할 수 있을 것으로 보인다", "~라고 할 수 있다" 반복 금지\n- "~것이다", "~할 필요가 있다" 반복 금지\n\n리듬: 단문(10자 이하)과 장문(30자 이상)을 섞어 단조로움 방지. 종결어미는 무작위로 섞지 않는다 — 기본 어미를 "~해요/~예요" 계열로 통일하고, 문단 첫 문장이나 핵심을 강조하는 문장에서만 예외적으로 "~합니다/~입니다"를 사용해 무게감을 준다.\n\n## [금지 표현 — 교육청 표시광고 심의 대상]\n아래 단어는 제목·본문·태그 어디에도 어떤 형태로도 사용하지 않습니다. 반드시 대체 표현으로 재구성합니다.\n- "선행" (선행학습 등 포함) → "사전학습" 등으로 대체\n- "예비" (예비중1 등 포함) → "신입" 또는 문맥에 맞게 자연스럽게 재구성\n\n## [글 마지막 연락처 블록]\n글 마지막에 아래 형식으로 연락처 블록을 반드시 포함합니다.\n{{학원명}}\n📞 {{연락처}}\n🗺️ 네이버지도: {{지도링크}}\n🌐 {{웹사이트}}\n연락처나 링크가 비어 있는 항목은 생략합니다.\n\n반드시 아래 JSON 형식으로만 응답하세요.\n\n{"title":"최종 포스팅 제목 (25~45자, SEO 키워드 앞부분)","intro":"도입부 본문 (초안 도입부 기반, 이번 글 방식으로 시작)","sections":[{"heading":"소제목","body":"완성된 본문 내용. 줄바꿈은 \\n\\n 사용"}],"conclusion":"마무리 본문 + CTA 블록 (CTA 유형에 따라 작성)","tags":["태그1","태그2","태그3","태그4","태그5"],"images":[{"section_index":0,"placement":"1번 섹션 본문 중간","search_query":"학생 공부 교실 (구글 이미지 검색에 넣을 한국어 검색어, 2~4단어)","description":"이 이미지가 표현하는 장면과 분위기를 한국어로 2~3문장으로 설명"}]}\n\n이미지 규칙: 썸네일은 만들지 않는다. 각 섹션(section)마다 그 내용과 어울리는 본문 삽입 이미지 1개씩을 images 배열에 추천한다 (section_index는 0부터 시작하는 sections 배열 인덱스). AI로 이미지를 생성하지 않고, 구글 이미지 검색(사용권 필터 적용)에서 바로 찾아 쓸 것이므로 search_query에는 해당 섹션 내용에 어울리는 사진이 나올 만한 짧고 구체적인 한국어 검색어를 넣을 것 (예: "칠판 앞 선생님 학생", "책상 공부 노트북"). 추상적인 단어("성장", "미래") 대신 눈에 보이는 구체적 장면 위주로.\n글자 수: 위 [분량] 섹션의 목표({{목표분량}}자, 공백 제외)를 반드시 지킬 것';
 
 // 목표 분량 숫자를 실제로 주입 — 기존 코드는 BLOG_FINAL_SYSTEM을 정적 문자열로만 썼는데,
 // 그 안의 {{목표분량}} 자리표시자를 채워주지 않으면 분량 지시가 숫자 없이 뭉뚱그려져
@@ -677,24 +677,21 @@ function blogRenderImages(images) {
   if (!c) return;
   if (!images || !images.length) { c.innerHTML = '<p style="color:#9aa1ad;font-size:13px;">생성된 이미지 정보가 없습니다.</p>'; return; }
   c.innerHTML = images.map(function(img, i) {
-    var isThumb = img.id === 'thumbnail';
-    var badge = isThumb ? '<span class="bimg-badge thumb">썸네일 (필수)</span>' : '<span class="bimg-badge body-img">본문 삽입</span>';
-    var overlayRow = img.overlay_text ? '<div class="bimg-overlay">오버레이 텍스트: <strong>' + blogEsc(img.overlay_text) + '</strong></div>' : '';
+    var secIdx = (typeof img.section_index === 'number') ? img.section_index : i;
+    var sections = (blogState.result && blogState.result.sections) || [];
+    var secHeading = sections[secIdx] ? sections[secIdx].heading : '';
+    var placement = img.placement || (secHeading ? secHeading + ' 섹션 본문' : '본문 이미지');
     var query = img.search_query || '';
-    var naverUrl = 'https://search.naver.com/search.naver?where=image&query=' + encodeURIComponent(query);
-    var unsplashUrl = 'https://unsplash.com/s/photos/' + encodeURIComponent(query);
-    return '<div class="bimg-card' + (isThumb ? ' is-thumb' : '') + '" id="bimg-card-' + i + '">'
-      + '<div class="bimg-preview" id="bimg-preview-' + i + '"><span style="font-size:11px">' + (isThumb ? '썸네일' : '본문 이미지') + '</span></div>'
+    var googleUrl = 'https://www.google.com/search?tbm=isch&tbs=il:ol&q=' + encodeURIComponent(query);
+    return '<div class="bimg-card" id="bimg-card-' + i + '">'
       + '<div class="bimg-info">'
-        + badge
-        + '<div class="bimg-placement">' + blogEsc(img.placement) + '</div>'
-        + overlayRow
+        + '<span class="bimg-badge body-img">본문 삽입</span>'
+        + '<div class="bimg-placement">' + blogEsc(placement) + '</div>'
         + '<div class="bimg-description" id="bimg-desc-' + i + '">' + blogEsc(img.description || '') + '</div>'
         + '<div class="bimg-query" id="bimg-query-' + i + '">🔍 검색어: <strong>' + blogEsc(query) + '</strong></div>'
         + '<div class="bimg-actions" id="bimg-actions-' + i + '">'
           + '<button class="blog-copy-btn" onclick="blogCopyQuery(this,' + i + ')">검색어 복사</button>'
-          + '<a class="bimg-gen-btn" href="' + naverUrl + '" target="_blank" rel="noopener">네이버 이미지 검색</a>'
-          + '<a class="bimg-gen-btn" href="' + unsplashUrl + '" target="_blank" rel="noopener">Unsplash 검색</a>'
+          + '<a class="bimg-gen-btn" href="' + googleUrl + '" target="_blank" rel="noopener">구글 이미지 검색 (사용권 필터)</a>'
           + '<button class="bimg-regen-btn" onclick="blogRegenImageQuery(this,' + i + ')">검색어 재생성</button>'
         + '</div>'
       + '</div>'
@@ -719,14 +716,12 @@ async function blogRegenImageQuery(btn, idx) {
   var img = images[idx];
   var result = blogState.result;
   btn.disabled = true; btn.textContent = '생성 중...';
-  var systemPrompt = '당신은 블로그에 어울리는 이미지를 무료 이미지 사이트(네이버 이미지, Unsplash 등)에서 찾아주는 검색어 전문가입니다.\n아래 블로그 내용과 이미지 슬롯 정보를 바탕으로 새로운 검색어를 생성하세요.\n\n반드시 아래 JSON 형식으로만 응답하세요:\n{"search_query":"짧고 구체적인 한국어 검색어 2~4단어 (추상적 단어 대신 눈에 보이는 구체적 장면)","description":"이 이미지가 표현하는 내용을 한국어로 2~3문장"}';
+  var secIdx = (typeof img.section_index === 'number') ? img.section_index : idx;
+  var sec = (result.sections || [])[secIdx] || {};
+  var systemPrompt = '당신은 블로그 본문에 어울리는 이미지를 구글 이미지 검색(사용권 필터)에서 찾아주는 검색어 전문가입니다.\n아래 블로그 섹션 내용을 바탕으로 새로운 검색어를 생성하세요.\n\n반드시 아래 JSON 형식으로만 응답하세요:\n{"search_query":"짧고 구체적인 한국어 검색어 2~4단어 (추상적 단어 대신 눈에 보이는 구체적 장면)","description":"이 이미지가 표현하는 내용을 한국어로 2~3문장"}';
   var userContent = '블로그 제목: ' + (result.title || '') + '\n'
-    + '이미지 슬롯: ' + img.id + ' (' + img.placement + ')\n'
-    + '배치 목적: ' + (img.placement_detail || '') + '\n'
-    + (img.overlay_text ? '오버레이 텍스트: ' + img.overlay_text + '\n' : '')
-    + '\n블로그 내용:\n'
-    + (result.intro ? result.intro.substring(0, 150) + '\n' : '')
-    + (result.sections || []).map(function(s) { return (s.heading || '') + ': ' + (s.body || '').substring(0, 80); }).join('\n')
+    + '해당 섹션 소제목: ' + (sec.heading || '') + '\n'
+    + '해당 섹션 본문: ' + (sec.body || '').substring(0, 300) + '\n'
     + '\n\n이전 검색어와 다른 방향으로 새 검색어를 생성해주세요.';
   try {
     var raw = await blogCall(systemPrompt, userContent, 400);
