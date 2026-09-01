@@ -431,6 +431,9 @@ async function useCredit(actionKey) {
   });
   if (!json.ok) throw new Error(json.error || '크레딧 사용에 실패했습니다.');
   if (typeof creditUpdateBadge === 'function') creditUpdateBadge();
+  if (!json.unlimited && typeof showToast === 'function') {
+    showToast('크레딧 ' + json.cost + '개 사용 (잔여 ' + json.remaining + '개)');
+  }
   return json;
 }
 

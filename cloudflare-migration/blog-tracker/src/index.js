@@ -168,7 +168,7 @@ async function useCredit(env, userId, actionKey) {
   row[8] = currentMonth;
   await updateRow(env, USERS_SHEET, u.rowNumber, row);
   await logCreditEvent(env, userId, '사용', ACTION_LABELS[actionKey] || actionKey, -cost, remaining);
-  return { ok: true, remaining, monthlyCredit };
+  return { ok: true, remaining, monthlyCredit, cost };
 }
 
 // 사용 내역 조회(크레딧 페이지) — 본인 것만, 최신순.
