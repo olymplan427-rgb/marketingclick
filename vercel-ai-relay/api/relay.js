@@ -12,6 +12,10 @@
 // 계약: POST { token, provider: 'claude'|'gemini'|'openai', apiKey, models: [주모델, ...폴백],
 //              system, messages: [{role,content}], max_tokens }
 // provider별 매칭 상세는 함수 하단 참고. Gemini만 models 배열을 순서대로 폴백 시도.
+//
+// maxDuration 미설정 시 Vercel 기본 실행시간 제한(플랜별 10초 안팎)에 걸려 지역 트렌드 리포트처럼
+// 응답이 오래 걸리는 호출이 타임아웃되는 문제가 실측으로 확인되어 60초로 늘림(2026-08-28).
+export const config = { maxDuration: 60 };
 
 function toGeminiParts(content) {
   if (typeof content === 'string') return [{ text: content }];
