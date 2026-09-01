@@ -1,0 +1,38 @@
+
+  <!-- PAGE HOME — 로그인 후 기본 진입 화면. 공지 + 크레딧 요약 + 기능 바로가기 + 최근 작성 글 -->
+  <div class="page active" id="page-home">
+    <div class="home-hero">
+      <div>
+        <div class="home-hero-greeting" id="home-greeting">안녕하세요 👋</div>
+        <div class="home-hero-sub">오늘도 마케팅딸깍으로 학원 마케팅을 빠르게 끝내보세요.</div>
+      </div>
+      <div class="home-hero-credit">
+        <div class="home-hero-credit-num" id="home-credit-num">-</div>
+        <div class="home-hero-credit-label">잔여 크레딧</div>
+      </div>
+    </div>
+
+    <div class="home-content">
+      <div class="tool-section">
+        <div class="sec-title">공지사항</div>
+        <div id="home-notice-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+      </div>
+
+      <div class="tool-section">
+        <div class="sec-title">기능 바로가기</div>
+        <div class="home-feature-grid" id="home-feature-grid"></div>
+      </div>
+
+      <div class="tool-section">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <div class="sec-title" style="margin:0;">최근 작성한 블로그 글</div>
+          <button class="btn" onclick="showPage('blog-history')">전체보기</button>
+        </div>
+        <div id="home-recent-list"></div>
+        <div class="empty-state" id="home-recent-empty" style="display:none;">
+          <div class="empty-state-title">아직 작성한 글이 없습니다</div>
+          <div class="empty-state-desc">블로그 작성에서 첫 글을 만들어보세요</div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /page-home -->
