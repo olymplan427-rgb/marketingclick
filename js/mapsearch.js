@@ -300,34 +300,37 @@ async function msFetchPosts(idx) {
   var bodyEl = document.getElementById('ms-modal-body');
   if (!modal || !bodyEl) return;
 
+  var placeId = msExtractPlaceId(academy.link);
+  var cfg = (typeof getMapsearchGasConfig === 'function') ? getMapsearchGasConfig() : { url: '', token: '' };
+  // 배경 확인(msRunBlogChecks)에서 이미 가져온 결과가 있으면 재요청하지 않고 재사용 — 이 경우 실제
+  // 조회가 발생하지 않으므로 크레딧 확인 팝업 자체를 띄우지 않는다.
+  var cached = placeId ? msState.postsCache[placeId] : null;
+
+  if (!cached && placeId && cfg.url && cfg.token) {
+    try {
+      await useCreditConfirm('mapsearch_search', '지도검색 블로그 취합');
+    } catch (ce) {
+      if (ce.cancelled) return; // 사용자가 취소 — 모달 자체를 열지 않음
+      titleEl.textContent = academy.name + ' — 블로그 취합';
+      modal.style.display = 'flex';
+      bodyEl.innerHTML = '<div class="hint-text">' + msEsc(ce.message || '크레딧 확인에 실패했습니다.') + '</div>';
+      return;
+    }
+  }
+
   titleEl.textContent = academy.name + ' — 블로그 취합';
   modal.style.display = 'flex';
 
-  var placeId = msExtractPlaceId(academy.link);
   if (!placeId) {
     bodyEl.innerHTML = '<div class="hint-text">카카오맵 장소 정보를 찾을 수 없습니다</div>';
     return;
   }
-
-  var cfg = (typeof getMapsearchGasConfig === 'function') ? getMapsearchGasConfig() : { url: '', token: '' };
   if (!cfg.url || !cfg.token) {
     bodyEl.innerHTML = '<div class="hint-text">설정 → AI 설정에서 구글시트 연동(GAS URL·토큰)을 먼저 설정해주세요</div>';
     return;
   }
 
   bodyEl.innerHTML = '<div class="blog-loading show"><span class="blog-spinner"></span>블로그 검색 중...</div>';
-
-  // 배경 확인(msRunBlogChecks)에서 이미 가져온 결과가 있으면 재요청하지 않고 재사용 — 이 경우 실제
-  // 조회가 발생하지 않으므로 크레딧도 차감하지 않는다.
-  var cached = msState.postsCache[placeId];
-  if (!cached) {
-    try {
-      await useCredit('mapsearch_search');
-    } catch(ce) {
-      bodyEl.innerHTML = '<div class="hint-text">' + msEsc(ce.message || '크레딧 확인에 실패했습니다.') + '</div>';
-      return;
-    }
-  }
   var result = cached ? { ok: true, posts: cached } : await msRequestAcademyPosts(placeId, cfg);
 
   if (!result.ok) {

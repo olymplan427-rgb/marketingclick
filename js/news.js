@@ -58,12 +58,15 @@ async function newsSuggestTopics(btn) {
   if (!cfg.url || !cfg.token) { alert('서버 설정 오류(GAS 미설정)'); return; }
 
   var orig = btn.textContent;
+  try {
+    await useCreditConfirm('news_search', '기사검색 주제 추천');
+  } catch (ce) { if (!ce.cancelled) alert(ce.message || '크레딧 확인에 실패했습니다.'); return; }
+
   btn.disabled = true;
   btn.textContent = '⏳ 뉴스 수집 중...';
   if (resultEl) resultEl.innerHTML = '';
 
   try {
-    await useCredit('news_search');
     var fetched = await newsFetchEducationNews();
     var news = fetched.items;
 
