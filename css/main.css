@@ -24,6 +24,8 @@ body{display:flex;height:100vh;overflow:hidden;font-family:'Pretendard','Noto Sa
 .sidebar-item:hover{background:var(--hover);color:var(--txt);}
 .sidebar-item.active{background:var(--hover);color:var(--txt);font-weight:600;}
 .sidebar-item .nav-icon{font-size:15px;width:16px;text-align:center;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;}
+.sidebar-item .nav-ext-icon{margin-left:auto;width:14px;height:14px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;color:var(--mut);}
+.sidebar-item .nav-ext-icon svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
 .sidebar-item .nav-icon svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;}
 .sidebar-bottom{margin-top:auto;padding-top:8px;border-top:1px solid var(--bdr);display:flex;flex-direction:column;gap:1px;}
 .sidebar-subnav{display:flex;flex-direction:column;gap:1px;padding-left:10px;}
@@ -415,7 +417,14 @@ canvas{display:block;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.15);cu
 .login-brand-sub{font-size:14px;color:rgba(255,255,255,.65);line-height:1.6;margin-bottom:28px;}
 .login-brand-feature{display:flex;align-items:center;gap:10px;font-size:13px;color:rgba(255,255,255,.85);margin-bottom:10px;}
 .login-brand-feature-icon{width:20px;height:20px;border-radius:6px;background:rgba(255,255,255,.12);display:inline-flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;}
-.login-form-panel{flex:1;min-width:0;background:var(--bg);display:flex;align-items:center;justify-content:center;}
+.login-form-panel{position:relative;flex:1;min-width:0;background:var(--bg);display:flex;align-items:center;justify-content:center;}
+.login-contact-footer{position:absolute;right:32px;bottom:24px;display:flex;align-items:center;gap:12px;font-size:12px;color:var(--mut);}
+.login-contact-btn{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--bdr);border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;color:var(--txt);cursor:pointer;}
+.login-contact-btn:hover{background:var(--hover);}
+.login-contact-btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+@media(max-width:640px){
+  .login-contact-footer{display:none;}
+}
 .login-promo-banner{display:flex;align-items:center;gap:8px;background:var(--acc-light);color:var(--acc);font-size:14px;font-weight:600;padding:14px 20px;border-radius:12px;margin-bottom:16px;}
 .login-promo-icon{font-size:16px;}
 @media(max-width:880px){
