@@ -117,11 +117,13 @@ async function reportGenerate(btn) {
     var trend = reportComputeMonthlyTrend(items);
 
     btn.textContent = '⏳ AI가 정리 중...';
-    var itemsForAI = items.slice(0, 100).map(function(it, i) {
+    // 항목 수/응답 길이가 클수록 Gemini 처리 시간이 늘어나 Vercel 함수 시간제한(60초, Hobby플랜 상한)을
+    // 넘기는 524 타임아웃이 실측으로 확인되어 축소함(2026-09-01).
+    var itemsForAI = items.slice(0, 60).map(function(it, i) {
       return { index: i, title: it.title, description: it.description, bloggername: it.bloggername, postdate: it.postdate };
     });
 
-    var raw = await geminiProxyCall({ model: getModel('gemini'), system: buildReportSystem(), content: JSON.stringify(itemsForAI), max_tokens: 8000 });
+    var raw = await geminiProxyCall({ model: getModel('gemini'), system: buildReportSystem(), content: JSON.stringify(itemsForAI), max_tokens: 5000 });
     var parsed;
     try {
       parsed = blogParseJson(raw);
