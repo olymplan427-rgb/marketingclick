@@ -147,8 +147,8 @@ hr{border:none;border-top:1px solid var(--bdr);margin:4px 0;}
 .canvas-desc{font-size:13px;color:var(--mut);}
 
 /* ── CANVAS AREA ── */
-.canvas-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;overflow:hidden;background:var(--bg);gap:14px;}
-.canvas-wrap{position:relative;height:calc(100vh - 230px);width:auto;max-width:calc((100vh - 230px) * 1080 / 1350);aspect-ratio:1080/1350;}
+.canvas-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;overflow:hidden;background:var(--bg);gap:14px;min-height:0;}
+.canvas-wrap{position:relative;flex:1;min-height:0;width:auto;max-width:100%;aspect-ratio:1080/1350;}
 canvas{display:block;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.15);cursor:default;height:100%;width:auto;}
 .canvas-badge{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.5);color:#fff;font-size:10px;padding:3px 8px;border-radius:99px;pointer-events:none;backdrop-filter:blur(4px);}
 .drag-hint{display:none;}
