@@ -1,31 +1,23 @@
-// gas/blog_tracker.gs 이전 — 블로그 저장/조회 + 로그인/사용량 제한 + Claude·Gemini·OpenAI 프록시.
-// 클라이언트(js/common.js)는 전혀 수정 불필요 — GAS 웹앱 URL 자리에 이 워커의 URL만 넣으면 됨.
-import { getValues, appendRow, updateRow, getSheetRowCount, ensureSheetExists } from './sheets.js';
-
-const USERS_SHEET = 'users';
-const BLOG_SHEET = 'blog_posts';
-const FEEDBACK_SHEET = 'feedback';
+// 구글시트(sheets.js) → D1(SQLite) 전환 (2026-09-01) — 매 요청마다 걸리던 Google OAuth 재인증 +
+// Sheets API 왕복이 없어지고, Worker 내부에서 로컬 SQLite 쿼리로 끝나 응답 속도가 크게 개선됨.
+// 클라이언트(js/common.js)는 전혀 수정 불필요 — 액션/응답 형태 100% 동일하게 유지.
 const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus', 'creditHistory', 'creditQuote'];
 
-// 액션키별 기본 크레딧 소모량 — config 시트 G/H열("액션키"/"크레딧비용")에 값이 있으면 그쪽이 우선(코드
-// 재배포 없이 관리자가 조정 가능, 기존 모델 카탈로그 표와 동일한 패턴). 시트에 없을 때만 이 기본값 사용.
+// 액션키별 기본 크레딧 소모량 — config_credit_costs 테이블에 값이 있으면 그쪽이 우선(코드 재배포
+// 없이 D1 값만 바꿔 조정 가능, 기존 구글시트 config 표와 동일한 우선순위 패턴). 없을 때만 기본값 사용.
 const CREDIT_COST_DEFAULTS = {
   blog_generate: 3, blog_analyze: 1, blog_finalize: 3, image_promo: 1, image_download: 1,
   mapsearch_nearby: 1, news_search: 1, report_generate: 5
 };
-// 크레딧 사용 내역(credit_log 시트)에 표시할 한글 이름 — config 시트에 관리자가 적어둔 이름과 통일.
+// 크레딧 사용 내역(credit_log)에 표시할 한글 이름 — config 표에 관리자가 적어둔 이름과 통일.
 const ACTION_LABELS = {
   blog_generate: '블로그 초안 생성', blog_analyze: 'AI자율분석', blog_finalize: '블로그 최종안 생성',
   image_promo: '이미지 홍보문구 생성', image_download: '이미지 다운로드',
   mapsearch_nearby: '주변 학원 검색', news_search: '기사검색 주제 추천', report_generate: '지역 트렌드 리포트 생성'
 };
-const CREDIT_LOG_SHEET = 'credit_log';
-const SCHOOL_SHARE_SHEET = 'school_share';
 
-// ── AI 설정 — gas/blog_tracker.gs에서 그대로 포팅 (전부 "config" 시트 하나로 관리) ──
-// 활성 프로바이더를 따로 고르지 않음 — API 키가 채워진 행이 곧 쓰이는 AI다. 여러 개가 채워져 있으면
-// AI_PROVIDERS 선언 순서(claude → gemini → openai)대로 가장 먼저 키가 있는 걸 사용한다.
-const CONFIG_SHEET = 'config';
+// ── AI 설정 — 활성 프로바이더를 따로 고르지 않음 — API 키가 채워진 행이 곧 쓰이는 AI다. 여러 개가
+// 채워져 있으면 AI_PROVIDERS 선언 순서(claude → gemini → openai)대로 가장 먼저 키가 있는 걸 사용한다.
 const AI_PROVIDERS = ['claude', 'gemini', 'openai'];
 const AI_KEY_PROP = { claude: 'ANTHROPIC_API_KEY', gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY' };
 const AI_DEFAULT_MODEL = { claude: 'claude-sonnet-5', gemini: 'gemini-3.6-flash', openai: 'gpt-5.6-terra' };
@@ -64,23 +56,18 @@ function rowDateKST(val) {
   return String(val || '').substring(0, 10);
 }
 
-// ── users 시트 ──────────────────────────────────────────────────
-// A~F: id/password/name/academy/status/role (기존 그대로, 일일한도 컬럼은 2026-09 삭제됨)
-// G~I: 월크레딧/잔여크레딧/크레딧리셋월(크레딧 시스템 전용) — rowNumber/raw는 useCredit()이 해당
-// 행을 덮어쓸 때(updateRow) 다른 컬럼값을 보존하기 위해 필요.
+function monthKST() {
+  return todayKST().substring(0, 7); // 'YYYY-MM'
+}
+
+// ── users 테이블 ──────────────────────────────────────────────────
 async function findUser(env, id) {
-  const rows = await getValues(env, USERS_SHEET + '!A2:I');
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    if (String(r[0]) === String(id)) {
-      return {
-        id: r[0], password: r[1], name: r[2], academy: r[3], status: r[4], role: r[5],
-        monthlyCredit: r[6], remainingCredit: r[7], creditResetMonth: r[8],
-        rowNumber: i + 2, raw: r
-      };
-    }
-  }
-  return null;
+  const row = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(id).first();
+  if (!row) return null;
+  return {
+    id: row.id, password: row.password, name: row.name, academy: row.academy, status: row.status, role: row.role,
+    monthlyCredit: row.monthly_credit, remainingCredit: row.remaining_credit, creditResetMonth: row.credit_reset_month
+  };
 }
 
 const SIGNUP_CREDIT = 500;
@@ -91,7 +78,9 @@ async function registerUser(env, id, password, name, academy, site) {
   const existing = await findUser(env, id);
   if (existing) return { ok: false, error: '이미 사용 중인 아이디입니다.' };
   const currentMonth = monthKST();
-  await appendRow(env, USERS_SHEET, [id, password, name, academy, '사용', '', SIGNUP_CREDIT, SIGNUP_CREDIT, currentMonth]);
+  await env.DB.prepare(
+    'INSERT INTO users (id,password,name,academy,status,role,monthly_credit,remaining_credit,credit_reset_month) VALUES (?,?,?,?,?,?,?,?,?)'
+  ).bind(id, password, name, academy, '사용', '', SIGNUP_CREDIT, SIGNUP_CREDIT, currentMonth).run();
   await logCreditEvent(env, id, '충전', '신규 가입 지급', SIGNUP_CREDIT, SIGNUP_CREDIT);
   return { ok: true };
 }
@@ -105,46 +94,32 @@ async function verifyUser(env, id, password, site) {
   return { valid: true, name: u.name, academy: u.academy, role: u.role };
 }
 
-// ── blog_posts 시트 ─────────────────────────────────────────────
+// ── blog_posts 테이블 ─────────────────────────────────────────────
 async function getMyPosts(env, userId, n) {
-  const rows = await getValues(env, BLOG_SHEET + '!A2:M');
-  return rows
-    .filter((r) => String(r[12] || '') === String(userId))
-    .reverse()
-    .slice(0, Math.min(n || 100, 100))
-    .map((r) => ({
-      date: rowDateKST(r[0]), type: r[1] || '', mood: r[2] || '', topic: r[3] || '',
-      keywords: r[4] || '', tags: r[5] || '', title: r[6] || '', body: r[7] || '', structure: r[8] || ''
-    }));
+  const { results } = await env.DB.prepare(
+    'SELECT * FROM blog_posts WHERE user_id = ? ORDER BY id DESC LIMIT ?'
+  ).bind(userId, Math.min(n || 100, 100)).all();
+  return results.map((r) => ({
+    date: rowDateKST(r.created_at), type: r.type || '', mood: r.mood || '', topic: r.topic || '',
+    keywords: r.keywords || '', tags: r.tags || '', title: r.title || '', body: r.body || '', structure: r.structure || ''
+  }));
 }
 
 // ── 크레딧 시스템 (2026-09) ─────────────────────────────────────
-// config 시트 H/I열("액션키"/"크레딧비용")에 값이 있으면 그쪽 우선, 없으면 CREDIT_COST_DEFAULTS.
-// 액션키로 넣을 값(코드가 실제로 보내는 키 그대로): blog_generate, image_promo, mapsearch_search,
-// news_search, report_generate — 각 행에 이 문자열을 그대로 입력해야 인식됨.
 async function getCreditCost(env, actionKey) {
-  const rows = await getValues(env, CONFIG_SHEET + '!H2:I');
-  for (const r of rows) {
-    if (String(r[0] || '').trim() === actionKey && r[1] !== undefined && String(r[1]).trim() !== '') {
-      const n = parseInt(r[1], 10);
-      if (!isNaN(n)) return n;
-    }
-  }
+  const row = await env.DB.prepare('SELECT cost FROM config_credit_costs WHERE action_key = ?').bind(actionKey).first();
+  if (row && row.cost !== null && row.cost !== undefined) return row.cost;
   return CREDIT_COST_DEFAULTS[actionKey] || 1;
 }
 
-function monthKST() {
-  return todayKST().substring(0, 7); // 'YYYY-MM'
-}
-
-// credit_log 시트(A~F: 일시/아이디/구분/사용항목/증감/잔액)에 매번 새 행만 추가하는
-// append-only 로그 — blog_posts/feedback과 동일 패턴(school_share의 upsert와는 다름).
+// credit_log 테이블(append-only 로그) — blog_posts/feedback과 동일 패턴(school_share의 upsert와는 다름).
 async function logCreditEvent(env, userId, type, item, delta, remaining) {
-  await ensureSheetExists(env, CREDIT_LOG_SHEET);
-  await appendRow(env, CREDIT_LOG_SHEET, [nowKST(), userId, type, item, delta, remaining]);
+  await env.DB.prepare(
+    'INSERT INTO credit_log (created_at,user_id,type,item,delta,remaining) VALUES (?,?,?,?,?,?)'
+  ).bind(nowKST(), userId, type, item, delta, remaining).run();
 }
 
-// users 시트 H(월크레딧)이 비어있으면 무제한 취급 — 관리자가 아직 값을 채우지 않은 기존 계정도
+// users.monthly_credit이 비어있으면 무제한 취급 — 관리자가 아직 값을 채우지 않은 기존 계정도
 // 이번 변경으로 갑자기 막히지 않도록 하는 안전한 기본값.
 async function useCredit(env, userId, actionKey) {
   if (!actionKey) return { ok: false, error: 'actionKey가 필요합니다.' };
@@ -167,24 +142,18 @@ async function useCredit(env, userId, actionKey) {
 
   if (needsReset) await logCreditEvent(env, userId, '충전', '월 크레딧 리셋', monthlyCredit, monthlyCredit);
   remaining -= cost;
-  const row = u.raw.slice();
-  while (row.length < 9) row.push('');
-  row[7] = remaining;
-  row[8] = currentMonth;
-  await updateRow(env, USERS_SHEET, u.rowNumber, row);
+  await env.DB.prepare('UPDATE users SET remaining_credit = ?, credit_reset_month = ? WHERE id = ?')
+    .bind(remaining, currentMonth, userId).run();
   await logCreditEvent(env, userId, '사용', ACTION_LABELS[actionKey] || actionKey, -cost, remaining);
   return { ok: true, remaining, monthlyCredit, cost };
 }
 
 // 사용 내역 조회(크레딧 페이지) — 본인 것만, 최신순.
 async function getCreditHistory(env, userId, n) {
-  const rows = await getValues(env, CREDIT_LOG_SHEET + '!A2:F');
-  const items = rows
-    .filter((r) => String(r[1] || '') === String(userId))
-    .reverse()
-    .slice(0, Math.min(n || 50, 100))
-    .map((r) => ({ date: r[0] || '', type: r[2] || '', item: r[3] || '', delta: r[4], remaining: r[5] }));
-  return { ok: true, items };
+  const { results } = await env.DB.prepare(
+    'SELECT * FROM credit_log WHERE user_id = ? ORDER BY id DESC LIMIT ?'
+  ).bind(userId, Math.min(n || 50, 100)).all();
+  return { ok: true, items: results.map((r) => ({ date: r.created_at || '', type: r.type || '', item: r.item || '', delta: r.delta, remaining: r.remaining })) };
 }
 
 // 실제 차감 없이 "이 액션을 하면 얼마가 나가는지" 미리보기(사용 전 확인 팝업용).
@@ -202,7 +171,7 @@ async function getCreditQuote(env, userId, actionKey) {
   return { ok: true, unlimited: false, cost, remaining, monthlyCredit };
 }
 
-// 차감 없이 현재 잔여 크레딧만 조회(설정 화면 표시용) — lazy reset 여부만 계산해서 보여주고 시트는 안 건드림.
+// 차감 없이 현재 잔여 크레딧만 조회(설정 화면 표시용) — lazy reset 여부만 계산해서 보여주고 DB는 안 건드림.
 async function getCreditStatus(env, userId) {
   const u = await findUser(env, userId);
   if (!u) return { ok: false, error: '사용자를 찾을 수 없습니다.' };
@@ -222,35 +191,34 @@ async function savePost(env, data) {
     // 일일한도 차단은 크레딧 시스템으로 대체됨(2026-09) — 실제 차단은 blog_generate
     // 액션 호출 직전 useCredit()에서 처리. 여기선 더 이상 재검사하지 않는다.
   }
-  await appendRow(env, BLOG_SHEET, [
+  await env.DB.prepare(
+    `INSERT INTO blog_posts (created_at,type,mood,topic,keywords,tags,title,body,structure,target_length,section_guide,prompt_version,user_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(
     nowKST(), data.type || '', data.mood || '', data.topic || '', data.keywords || '',
     data.tags || '', data.title || '', data.body || '', data.structure || '',
     data.targetLength || '', data.sectionGuide || '', data.promptVersion || '', data.userId || ''
-  ]);
+  ).run();
   return { ok: true };
 }
 
 // ── 피드백/문의 (게시판 형태, 스레드별로 본인+관리자만 조회 가능) ─────
-async function allFeedbackRows(env) {
-  return getValues(env, FEEDBACK_SHEET + '!A2:J');
-}
-
 async function getFeedbackThreads(env, userId, role) {
-  const rows = await allFeedbackRows(env);
   const isAdmin = String(role) === '관리자';
+  const { results } = isAdmin
+    ? await env.DB.prepare('SELECT * FROM feedback ORDER BY created_at ASC').all()
+    : await env.DB.prepare('SELECT * FROM feedback WHERE owner_id = ? ORDER BY created_at ASC').bind(userId).all();
+
   const byThread = {};
   const order = [];
-
-  rows.forEach((row) => {
-    const threadId = row[1];
-    const ownerId = row[6];
-    if (!isAdmin && String(ownerId) !== String(userId)) return;
+  results.forEach((row) => {
+    const threadId = row.thread_id;
     if (!byThread[threadId]) {
-      byThread[threadId] = { threadId, ownerId, ownerName: row[7] || '', ownerAcademy: row[8] || '', messages: [] };
+      byThread[threadId] = { threadId, ownerId: row.owner_id, ownerName: row.owner_name || '', ownerAcademy: row.owner_academy || '', messages: [] };
       order.push(threadId);
     }
     byThread[threadId].messages.push({
-      id: row[0], date: row[2], authorId: row[3], authorName: row[4] || '', authorRole: row[5] || '', content: row[9] || ''
+      id: row.id, date: row.created_at, authorId: row.author_id, authorName: row.author_name || '', authorRole: row.author_role || '', content: row.content || ''
     });
   });
 
@@ -267,7 +235,9 @@ async function getFeedbackThreads(env, userId, role) {
 async function postFeedback(env, userId, v, content) {
   if (!content) return { ok: false, error: '내용을 입력해주세요.' };
   const id = crypto.randomUUID();
-  await appendRow(env, FEEDBACK_SHEET, [id, id, nowKST(), userId, v.name || userId, v.role || '', userId, v.name || userId, v.academy || '', content]);
+  await env.DB.prepare(
+    'INSERT INTO feedback (id,thread_id,created_at,author_id,author_name,author_role,owner_id,owner_name,owner_academy,content) VALUES (?,?,?,?,?,?,?,?,?,?)'
+  ).bind(id, id, nowKST(), userId, v.name || userId, v.role || '', userId, v.name || userId, v.academy || '', content).run();
   return { ok: true, threadId: id };
 }
 
@@ -275,52 +245,31 @@ async function replyFeedback(env, userId, v, threadId, content) {
   if (!content) return { ok: false, error: '내용을 입력해주세요.' };
   if (!threadId) return { ok: false, error: '스레드 정보가 없습니다.' };
 
-  const rows = await allFeedbackRows(env);
-  const match = rows.find((r) => String(r[1]) === String(threadId));
+  const match = await env.DB.prepare('SELECT owner_id, owner_name, owner_academy FROM feedback WHERE thread_id = ? LIMIT 1').bind(threadId).first();
   if (!match) return { ok: false, error: '스레드를 찾을 수 없습니다.' };
-  const owner = { id: match[6], name: match[7], academy: match[8] };
+  const owner = { id: match.owner_id, name: match.owner_name, academy: match.owner_academy };
   if (String(v.role) !== '관리자' && String(owner.id) !== String(userId)) {
     return { ok: false, error: '이 스레드에 답변할 권한이 없습니다.' };
   }
 
   const id = crypto.randomUUID();
-  await appendRow(env, FEEDBACK_SHEET, [id, threadId, nowKST(), userId, v.name || userId, v.role || '', owner.id, owner.name, owner.academy, content]);
+  await env.DB.prepare(
+    'INSERT INTO feedback (id,thread_id,created_at,author_id,author_name,author_role,owner_id,owner_name,owner_academy,content) VALUES (?,?,?,?,?,?,?,?,?,?)'
+  ).bind(id, threadId, nowKST(), userId, v.name || userId, v.role || '', owner.id, owner.name, owner.academy, content).run();
   return { ok: true };
 }
 
 // ── 학교 점유율 ────────────────────────────────────────────────
-// userId로 school_share 시트에서 행 위치(2-based sheet row)를 찾음 — 없으면 null.
-async function findSchoolShareRow(env, userId) {
-  const rows = await getValues(env, SCHOOL_SHARE_SHEET + '!A2:C');
-  for (let i = rows.length - 1; i >= 0; i--) {
-    if (String(rows[i][1]) === String(userId)) return { rowNumber: i + 2, row: rows[i] };
-  }
-  return null;
-}
-
 async function loadSchoolShare(env, userId) {
-  try {
-    await ensureSheetExists(env, SCHOOL_SHARE_SHEET);
-    const found = await findSchoolShareRow(env, userId);
-    return { ok: true, data: found ? found.row[2] : null };
-  } catch (e) {
-    return { ok: false, error: 'school_share 시트 접근 오류 (탭이 없거나 권한 문제)' };
-  }
+  const row = await env.DB.prepare('SELECT data FROM school_share WHERE user_id = ?').bind(userId).first();
+  return { ok: true, data: row ? row.data : null };
 }
 
 async function saveSchoolShare(env, userId, jsonData) {
-  try {
-    await ensureSheetExists(env, SCHOOL_SHARE_SHEET);
-    const found = await findSchoolShareRow(env, userId);
-    if (found) {
-      await updateRow(env, SCHOOL_SHARE_SHEET, found.rowNumber, [nowKST(), userId, jsonData]);
-    } else {
-      await appendRow(env, SCHOOL_SHARE_SHEET, [nowKST(), userId, jsonData]);
-    }
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: 'school_share 시트 저장 오류' };
-  }
+  await env.DB.prepare(
+    'INSERT INTO school_share (user_id,updated_at,data) VALUES (?,?,?) ON CONFLICT(user_id) DO UPDATE SET updated_at=excluded.updated_at, data=excluded.data'
+  ).bind(userId, nowKST(), jsonData).run();
+  return { ok: true };
 }
 
 // ── 학교알리미 OpenAPI (schoolinfo.go.kr) 프록시 ─────────────────────
@@ -340,52 +289,38 @@ async function schoolShareSearch(env, sidoCode, sggCode, schulKndCode) {
   }
 }
 
-// config 시트(A~C열: 설정/값/모델, E~F열: 프로바이더/모델 표) 조회 — gas/blog_tracker.gs의
-// _getConfigValue/_getConfiguredModel/_getModelCatalogFromSheet/_getModelListForProvider/
-// _getActiveProvider를 그대로 포팅하되, AI 프록시 호출 1건당 A~C열을 3번씩 중복으로 읽던 것을
-// getConfigRows()로 한 번만 읽어 재사용하도록 합침(요청당 Sheets API 왕복 3회 → 1회, 그만큼 AI
-// 응답 시작까지의 지연 단축). 관리자가 시트만 고치면 코드 재배포 없이 즉시 반영되는 동작은 그대로.
-async function getConfigRows(env) {
-  return getValues(env, CONFIG_SHEET + '!A2:C');
+// config 테이블(key/value/model) + config_models(provider/model 목록) 조회 — 구글시트 config
+// 탭의 A~C열/E~F열을 그대로 옮긴 구조. 관리자가 D1 값만 고치면 코드 재배포 없이 즉시 반영되는
+// 동작은 그대로 유지(값 변경은 `wrangler d1 execute mtt-blog-tracker --remote --command=...`로 수행).
+async function getConfigRow(env, key) {
+  return env.DB.prepare('SELECT value, model FROM config WHERE key = ?').bind(key).first();
 }
 
-function pickConfigValue(rows, key) {
-  for (const r of rows) {
-    if (String(r[0]) === key && r[1]) return String(r[1]);
-  }
-  return '';
-}
-
-function pickConfiguredModel(rows, provider) {
-  const keyRow = AI_KEY_PROP[provider];
-  for (const r of rows) {
-    if (String(r[0]) === keyRow && r[2]) return String(r[2]);
-  }
-  return AI_DEFAULT_MODEL[provider];
-}
-
-async function getModelListForProvider(env, provider) {
-  const rows = await getValues(env, CONFIG_SHEET + '!E2:F');
-  const list = [];
-  rows.forEach((r) => {
-    const p = String(r[0] || '').trim();
-    const m = String(r[1] || '').trim();
-    if (p === provider && m && list.indexOf(m) === -1) list.push(m);
-  });
-  return list.length ? list : (AI_MODEL_CATALOG[provider] || []);
-}
-
-function pickActiveProvider(rows) {
+function pickActiveProviderRows(configRows) {
   for (const p of AI_PROVIDERS) {
-    if (pickConfigValue(rows, AI_KEY_PROP[p])) return p;
+    const row = configRows[AI_KEY_PROP[p]];
+    if (row && row.value) return p;
   }
   return 'claude';
 }
 
+async function getAllConfigRows(env) {
+  const { results } = await env.DB.prepare('SELECT key, value, model FROM config').all();
+  const map = {};
+  results.forEach((r) => { map[r.key] = { value: r.value, model: r.model }; });
+  return map;
+}
+
+async function getModelListForProvider(env, provider) {
+  const { results } = await env.DB.prepare('SELECT model FROM config_models WHERE provider = ? ORDER BY ord ASC').bind(provider).all();
+  const list = results.map((r) => r.model).filter(Boolean);
+  return list.length ? list : (AI_MODEL_CATALOG[provider] || []);
+}
+
 // Anthropic/Google이 Cloudflare Workers발 요청 자체를 차단·지역제한하는 문제가 있어(학교알리미 API도
 // 같은 부류로 확인됨), 실제 AI 호출만은 Cloudflare가 아닌 Vercel(env.AI_RELAY_URL)로 중계한다.
-// API 키는 여기서 매번 config 시트에서 조회해 함께 넘길 뿐, Vercel 쪽엔 저장하지 않는다 —
-// "AI 키는 config 시트가 유일한 출처"라는 기존 설계 유지.
+// API 키는 여기서 매번 config 테이블에서 조회해 함께 넘길 뿐, Vercel 쪽엔 저장하지 않는다 —
+// "AI 키는 config가 유일한 출처"라는 기존 설계 유지.
 async function callAiRelay(env, body) {
   const res = await fetch(env.AI_RELAY_URL, {
     method: 'POST',
@@ -401,14 +336,14 @@ async function callAiRelay(env, body) {
   }
 }
 
-// gas/blog_tracker.gs의 _aiProxy 포팅 — 활성 프로바이더(키가 채워진 첫 프로바이더)로 1회 호출.
-// gemini가 활성인 경우에만 config 시트의 모델 목록 전체를 폴백용으로 함께 넘긴다.
+// 활성 프로바이더(키가 채워진 첫 프로바이더)로 1회 호출.
+// gemini가 활성인 경우에만 config의 모델 목록 전체를 폴백용으로 함께 넘긴다.
 async function claudeProxy(env, payload) {
-  const rows = await getConfigRows(env);
-  const provider = pickActiveProvider(rows);
-  const apiKey = pickConfigValue(rows, AI_KEY_PROP[provider]);
-  if (!apiKey) return { ok: false, error: 'config 시트에 ' + AI_KEY_PROP[provider] + ' 값이 아직 입력되지 않았습니다.' };
-  const model = pickConfiguredModel(rows, provider);
+  const configRows = await getAllConfigRows(env);
+  const provider = pickActiveProviderRows(configRows);
+  const apiKey = (configRows[AI_KEY_PROP[provider]] || {}).value;
+  if (!apiKey) return { ok: false, error: 'config에 ' + AI_KEY_PROP[provider] + ' 값이 아직 입력되지 않았습니다.' };
+  const model = (configRows[AI_KEY_PROP[provider]] || {}).model || AI_DEFAULT_MODEL[provider];
   const models = provider === 'gemini' ? [model, ...(await getModelListForProvider(env, provider)).filter((m) => m !== model)] : [model];
   return callAiRelay(env, {
     provider, apiKey, models,
@@ -418,12 +353,12 @@ async function claudeProxy(env, payload) {
   });
 }
 
-// gas/blog_tracker.gs의 _geminiProxy 포팅 — 뉴스 소재추천/지역 트렌드 리포트 전용, 항상 Gemini만 사용.
+// 뉴스 소재추천/지역 트렌드 리포트 전용, 항상 Gemini만 사용.
 async function geminiProxy(env, payload) {
-  const rows = await getConfigRows(env);
-  const apiKey = pickConfigValue(rows, 'GEMINI_API_KEY');
-  if (!apiKey) return { ok: false, error: 'config 시트에 GEMINI_API_KEY가 아직 설정되지 않았습니다.' };
-  const preferred = pickConfiguredModel(rows, 'gemini');
+  const row = await getConfigRow(env, 'GEMINI_API_KEY');
+  const apiKey = row && row.value;
+  if (!apiKey) return { ok: false, error: 'config에 GEMINI_API_KEY가 아직 설정되지 않았습니다.' };
+  const preferred = (row && row.model) || AI_DEFAULT_MODEL.gemini;
   const fallback = await getModelListForProvider(env, 'gemini');
   const models = [preferred, ...fallback.filter((m) => m !== preferred)];
   const result = await callAiRelay(env, {
@@ -505,10 +440,10 @@ export default {
         if (action === 'fetchNaverBlog') return jsonResponse(await fetchNaverBlogContent(p.get('url') || ''));
 
         const n = Math.min(parseInt(p.get('n') || '20', 10), 100);
-        const rows = await getValues(env, BLOG_SHEET + '!A2:I');
-        const posts = rows.slice(-n).reverse().map((r) => ({
-          date: rowDateKST(r[0]), type: r[1] || '', mood: r[2] || '', topic: r[3] || '',
-          keywords: r[4] || '', tags: r[5] || '', title: r[6] || '', body: r[7] || '', structure: r[8] || ''
+        const { results } = await env.DB.prepare('SELECT * FROM blog_posts ORDER BY id DESC LIMIT ?').bind(n).all();
+        const posts = results.map((r) => ({
+          date: rowDateKST(r.created_at), type: r.type || '', mood: r.mood || '', topic: r.topic || '',
+          keywords: r.keywords || '', tags: r.tags || '', title: r.title || '', body: r.body || '', structure: r.structure || ''
         }));
         return jsonResponse({ posts });
       }
