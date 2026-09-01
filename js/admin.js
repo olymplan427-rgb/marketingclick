@@ -30,6 +30,10 @@ async function adminInit() {
 }
 
 // ── AI 프로바이더 (키/모델) ──────────────────────────────────────
+// config.model(아래 드롭다운)은 "1차 시도 모델"일 뿐이고, 실제 순차 폴백(1차 실패/429 시 다음
+// 모델로 자동 전환)은 Gemini에서만 동작하며 그 순서는 config_models 테이블(우선순위 목록)이
+// 결정한다(claudeProxy/geminiProxy 참고 — provider==='gemini'일 때만 fallback 배열을 붙임).
+// Claude/OpenAI는 폴백 없이 1차 모델 하나만 사용.
 var PROVIDER_LABELS = { claude: 'Claude (Anthropic)', gemini: 'Gemini (Google)', openai: 'OpenAI' };
 
 function adminRenderAiList() {
@@ -40,6 +44,15 @@ function adminRenderAiList() {
     var modelOptions = (models[k.provider] || []).map(function(m) {
       return '<option value="' + adminEsc(m) + '"' + (m === k.model ? ' selected' : '') + '>' + adminEsc(m) + '</option>';
     }).join('');
+    var fallbackBlock = '';
+    if (k.provider === 'gemini') {
+      var fallbackList = (models.gemini || []).join('\n');
+      fallbackBlock = '<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--bdr);">'
+        + '<div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:4px;">순차 폴백 우선순위 (한 줄에 모델 하나, 위에서부터 순서대로 시도 — 한도초과/실패 시 다음 줄로 자동 전환)</div>'
+        + '<textarea class="blog-input" id="admin-fallback-' + k.provider + '" rows="4" style="width:100%;font-family:monospace;font-size:12px;">' + adminEsc(fallbackList) + '</textarea>'
+        + '<button class="btn" style="margin-top:6px;" onclick="adminSaveFallback(\'' + k.provider + '\')">폴백 순서 저장</button>'
+      + '</div>';
+    }
     return '<div class="blog-card">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
         + '<div style="font-weight:800;font-size:13px;color:var(--txt);">' + adminEsc(PROVIDER_LABELS[k.provider] || k.provider) + '</div>'
@@ -50,6 +63,8 @@ function adminRenderAiList() {
         + '<select class="blog-input" style="width:220px;" id="admin-model-' + k.provider + '">' + modelOptions + '</select>'
         + '<button class="btn btn-primary" onclick="adminSaveAiRow(\'' + k.provider + '\',\'' + k.key + '\')">저장</button>'
       + '</div>'
+      + '<div style="font-size:11px;color:var(--mut);margin-top:6px;">위 드롭다운은 1차 시도 모델' + (k.provider === 'gemini' ? '(아래 폴백 목록 맨 앞에 없어도 항상 가장 먼저 시도됨)' : '') + '</div>'
+      + fallbackBlock
     + '</div>';
   }).join('');
 }
@@ -69,16 +84,41 @@ async function adminSaveAiRow(provider, key) {
   }
 }
 
+async function adminSaveFallback(provider) {
+  var el = document.getElementById('admin-fallback-' + provider);
+  var list = el ? el.value.split('\n').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+  try {
+    await adminSetModels(provider, list);
+    adminShowError('');
+    await adminInit();
+  } catch (e) {
+    adminShowError(e.message || '저장 실패');
+  }
+}
+
 // ── 기능별 크레딧 비용 ────────────────────────────────────────────
+var CREDIT_COST_GROUPS = [
+  { title: '블로그', keys: ['blog_analyze', 'blog_generate', 'blog_finalize', 'news_search'] },
+  { title: '도구', keys: ['mapsearch_nearby', 'report_generate', 'image_promo', 'image_download'] }
+];
+
 function adminRenderCreditCosts() {
   var body = document.getElementById('admin-credit-cost-body');
   if (!body || !adminState.config) return;
-  body.innerHTML = adminState.config.creditCosts.map(function(c) {
-    return '<tr style="border-bottom:1px solid var(--bdr);">'
-      + '<td style="padding:10px;">' + adminEsc(c.label) + '</td>'
-      + '<td style="padding:10px;"><input class="blog-input" type="number" min="0" style="width:100px;" id="admin-cost-' + c.actionKey + '" value="' + adminEsc(c.cost) + '"></td>'
-      + '<td style="padding:10px;"><button class="btn" onclick="adminSaveCreditCost(\'' + c.actionKey + '\')">저장</button></td>'
-    + '</tr>';
+  var byKey = {};
+  adminState.config.creditCosts.forEach(function(c) { byKey[c.actionKey] = c; });
+  body.innerHTML = CREDIT_COST_GROUPS.map(function(g) {
+    var groupHeader = '<tr><td colspan="3" style="padding:14px 10px 6px;font-size:12px;font-weight:800;color:var(--acc);">' + adminEsc(g.title) + '</td></tr>';
+    var rows = g.keys.map(function(actionKey) {
+      var c = byKey[actionKey];
+      if (!c) return '';
+      return '<tr style="border-bottom:1px solid var(--bdr);">'
+        + '<td style="padding:10px;">' + adminEsc(c.label) + '</td>'
+        + '<td style="padding:10px;"><input class="blog-input" type="number" min="0" style="width:100px;" id="admin-cost-' + c.actionKey + '" value="' + adminEsc(c.cost) + '"></td>'
+        + '<td style="padding:10px;"><button class="btn" onclick="adminSaveCreditCost(\'' + c.actionKey + '\')">저장</button></td>'
+      + '</tr>';
+    }).join('');
+    return groupHeader + rows;
   }).join('');
 }
 
