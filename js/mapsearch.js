@@ -309,21 +309,8 @@ async function msFetchPosts(idx) {
 
   var placeId = msExtractPlaceId(academy.link);
   var cfg = (typeof getMapsearchGasConfig === 'function') ? getMapsearchGasConfig() : { url: '', token: '' };
-  // 배경 확인(msRunBlogChecks)에서 이미 가져온 결과가 있으면 재요청하지 않고 재사용 — 이 경우 실제
-  // 조회가 발생하지 않으므로 크레딧 확인 팝업 자체를 띄우지 않는다.
+  // 배경 확인(msRunBlogChecks)에서 이미 가져온 결과가 있으면 재요청하지 않고 재사용
   var cached = placeId ? msState.postsCache[placeId] : null;
-
-  if (!cached && placeId && cfg.url && cfg.token) {
-    try {
-      await useCreditConfirm('mapsearch_search', '지도검색 블로그 취합');
-    } catch (ce) {
-      if (ce.cancelled) return; // 사용자가 취소 — 모달 자체를 열지 않음
-      titleEl.textContent = academy.name + ' — 블로그 취합';
-      modal.style.display = 'flex';
-      bodyEl.innerHTML = '<div class="hint-text">' + msEsc(ce.message || '크레딧 확인에 실패했습니다.') + '</div>';
-      return;
-    }
-  }
 
   titleEl.textContent = academy.name + ' — 블로그 취합';
   modal.style.display = 'flex';
