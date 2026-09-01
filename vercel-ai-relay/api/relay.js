@@ -46,7 +46,7 @@ async function callClaude(apiKey, model, system, messages, maxTokens) {
   return { ok: true, data: { content: [textBlock] } };
 }
 
-async function callGeminiOnce(apiKey, model, system, messages, maxTokens) {
+async function callGeminiOnce(apiKey, model, system, messages, maxTokens, timeoutMs) {
   const lastUser = (messages && messages[messages.length - 1]) || {};
   const body = {
     contents: [{ role: 'user', parts: toGeminiParts(lastUser.content) }],
@@ -54,7 +54,16 @@ async function callGeminiOnce(apiKey, model, system, messages, maxTokens) {
   };
   if (system) body.systemInstruction = { parts: [{ text: system }] };
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + apiKey;
-  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res;
+  try {
+    res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal });
+  } catch (e) {
+    return { ok: false, error: e.name === 'AbortError' ? 'Gemini 응답 지연(' + Math.round(timeoutMs / 1000) + '초 초과)' : e.message };
+  } finally {
+    clearTimeout(timer);
+  }
   const json = await res.json();
   if (res.status !== 200) return { ok: false, error: (json.error && json.error.message) || ('Gemini API 오류 ' + res.status) };
   const text = json.candidates && json.candidates[0] && json.candidates[0].content &&
@@ -64,10 +73,18 @@ async function callGeminiOnce(apiKey, model, system, messages, maxTokens) {
 }
 
 // 429/오류/빈응답이면 다음 모델로 순서대로 폴백 — 기존 GAS _callGeminiGeneral/_geminiProxy와 동일 동작.
+// Vercel 함수 실행시간 제한(vercel.json의 maxDuration, Hobby플랜 최대 60초)에 걸리지 않도록
+// 모델 1개당 타임아웃을 두고, 남은 예산이 얼마 안 남으면 더 이상 폴백을 시도하지 않고 바로 반환한다
+// (전부 시도하다 60초를 넘겨 Vercel에 강제 종료당하면 클라이언트엔 아무 응답도 못 주고 524만 뜬다 — 2026-09-01 실측).
+const GEMINI_BUDGET_MS = 50000; // maxDuration 60초 중 여유 10초를 남김
+const GEMINI_MIN_ATTEMPT_MS = 15000; // 이 시간도 못 줄 만큼 예산이 없으면 재시도 포기
 async function callGemini(apiKey, models, system, messages, maxTokens) {
+  const deadline = Date.now() + GEMINI_BUDGET_MS;
   let lastErr = null;
   for (const model of models) {
-    const r = await callGeminiOnce(apiKey, model, system, messages, maxTokens);
+    const remaining = deadline - Date.now();
+    if (remaining < GEMINI_MIN_ATTEMPT_MS) break;
+    const r = await callGeminiOnce(apiKey, model, system, messages, maxTokens, remaining);
     if (r.ok) return { ok: true, data: { content: [{ text: r.text }] }, text: r.text, model };
     lastErr = r.error;
   }
