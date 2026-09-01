@@ -1496,7 +1496,10 @@ function p2setCol(n, skipRender) {
   p2Canvas.addEventListener('touchend', onUp);
 })();
 
-document.getElementById('p2-dl').addEventListener('click', function() {
+document.getElementById('p2-dl').addEventListener('click', async function() {
+  try {
+    await useCreditConfirm('image_download', '이미지 다운로드');
+  } catch (ce) { return; }
   var prevSel = p2State.selId;
   var prevLogo = p2State.selLogoFile;
   var prevCrop = p2State.cropMode;
