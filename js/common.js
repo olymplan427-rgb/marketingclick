@@ -24,7 +24,7 @@ function showPage(id) {
   document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
   document.querySelectorAll('.sidebar-item').forEach(function(i) { i.classList.remove('active'); });
   // 설정 서브메뉴는 설정 계열이 아닐 때 닫기
-  if (id !== 'settings-ai' && id !== 'settings-prompt' && id !== 'settings-instagram') {
+  if (id !== 'settings-prompt' && id !== 'settings-instagram') {
     var subnav = document.getElementById('sidebar-subnav-settings');
     if (subnav) subnav.style.display = 'none';
   }
@@ -80,21 +80,20 @@ function showPage(id) {
     } else if (id === 'blog-history') {
       blogHistoryInit();
     }
-  } else if (id === 'settings-ai' || id === 'settings-prompt' || id === 'settings-instagram') {
+  } else if (id === 'settings-prompt' || id === 'settings-instagram') {
     document.getElementById('page-settings').classList.add('active');
     var navSettings = document.getElementById('nav-settings');
     if (navSettings) navSettings.classList.add('active');
     var subnav = document.getElementById('sidebar-subnav-settings');
     if (subnav) subnav.style.display = '';
-    var sub = id === 'settings-ai' ? 'ai' : id === 'settings-prompt' ? 'prompt' : 'instagram';
-    ['ai','prompt','instagram'].forEach(function(t) {
+    var sub = id === 'settings-prompt' ? 'prompt' : 'instagram';
+    ['prompt','instagram'].forEach(function(t) {
       var ni = document.getElementById('nav-settings-' + t);
       if (ni) ni.classList.toggle('active', t === sub);
       var ti = document.getElementById('settab-' + t);
       if (ti) ti.style.display = (t === sub) ? '' : 'none';
     });
-    if (sub === 'ai') settingsInit();
-    else if (sub === 'prompt') settingsInitPrompt();
+    if (sub === 'prompt') settingsInitPrompt();
     else settingsInitInstagram();
   } else if (id === 'monitor') {
     document.getElementById('page-monitor').classList.add('active');
@@ -617,10 +616,6 @@ function applyFeatureFlags() {
     var imgPromoSec = document.getElementById('img-promo-section');
     if (imgPromoSec) imgPromoSec.style.display = 'none';
   }
-  if (f.accountNote === false) {
-    var accNote = document.getElementById('account-sub-note');
-    if (accNote) accNote.style.display = 'none';
-  }
 }
 
 // ── 모델 선택 ─────────────────────────────────────────────────────
@@ -732,10 +727,6 @@ async function gasFetchNaverBlogContent(url) {
 }
 
 // ── 설정 페이지 초기화 ────────────────────────────────────────────
-function settingsInit() {
-  settingsUpdateStatus();
-}
-
 function _migrateOldPrompts() {
   // 구버전 기술 프롬프트가 저장돼 있으면 삭제 (사용자가 편집할 수 없는 숨김 부분)
   var oldPromo = localStorage.getItem('mtt_promo_prompt') || '';
