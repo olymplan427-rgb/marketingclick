@@ -1,28 +1,39 @@
 
-  <!-- PAGE FEEDBACK -->
+  <!-- PAGE FEEDBACK (사이드바 라벨: 의견보내기) -->
   <div class="page" id="page-feedback">
-  <div class="blog-left-wrap">
+    <div class="page-topbar"><div class="page-topbar-title">의견보내기</div></div>
+    <div class="info-banner">
+      <div class="info-banner-icon"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+      <div class="info-banner-body">
+        <div class="info-banner-title">불편한 점, 개선 아이디어, 버그를 자유롭게 남겨주세요</div>
+        <div class="info-banner-desc">작성한 글은 본인과 관리자만 볼 수 있어요. 급한 문의는 사이드바 "문의하기"(카카오톡)를 이용해주세요.</div>
+      </div>
+    </div>
+
+    <div class="page-row">
+    <div class="blog-left-wrap">
     <div class="blog-left">
-      <div class="panel-intro">
-        <div class="panel-intro-title">피드백 / 문의</div>
-        <div class="panel-intro-desc">관리자에게 의견이나 문의를 남길 수 있습니다. 작성한 글은 본인과 관리자만 볼 수 있습니다.</div>
-      </div>
       <div class="tool-section">
-        <label class="blog-label">새 문의 작성</label>
-        <textarea class="blog-input" id="fb-new-content" rows="4" placeholder="문의하실 내용을 입력하세요" style="min-height:90px;"></textarea>
-        <button class="btn btn-primary" style="margin-top:8px;" onclick="feedbackPost()">등록</button>
+        <div class="sec-title">새 의견 작성</div>
+        <div class="hint-text" style="margin-bottom:8px;">예) "크레딧 차감 기준이 어디에 나와있는지 잘 안 보여요", "이런 기능이 있으면 좋겠어요" 등 편하게 남겨주세요</div>
+        <textarea class="blog-input" id="fb-new-content" rows="4" placeholder="의견을 입력하세요" style="min-height:90px;"></textarea>
+        <button class="btn btn-primary" style="margin-top:8px;width:100%;" onclick="feedbackPost()">등록</button>
+        <div id="fb-alert" class="blog-alert err"></div>
       </div>
-      <div id="fb-alert" class="blog-alert err"></div>
-      <button class="btn btn-outline" style="font-size:12px;padding:6px 14px;margin-bottom:10px;" onclick="feedbackInit()">새로고침</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:4px 2px 10px;">
+        <div class="sec-title" style="margin:0;">내 의견 목록</div>
+        <button class="btn btn-outline" style="font-size:12px;padding:6px 14px;" onclick="feedbackInit()">새로고침</button>
+      </div>
       <div id="fb-list"></div>
     </div>
-  </div>
-  <div class="blog-right">
-    <div id="fb-detail">
-      <div class="blog-card">
-        <div style="font-size:13px;font-weight:900;color:var(--txt);margin-bottom:8px;">피드백 / 문의</div>
-        <div style="font-size:12px;color:var(--mut);line-height:1.7;">왼쪽 목록에서 글을 클릭하면<br>여기에 전체 대화가 표시됩니다.</div>
+    </div>
+    <div class="blog-right">
+      <div id="fb-detail">
+        <div class="blog-card">
+          <div style="font-size:13px;font-weight:900;color:var(--txt);margin-bottom:8px;">의견 상세</div>
+          <div style="font-size:12px;color:var(--mut);line-height:1.7;">왼쪽 목록에서 글을 클릭하면<br>여기에 전체 대화가 표시됩니다.</div>
+        </div>
       </div>
     </div>
-  </div>
+    </div>
   </div><!-- /page-feedback -->
