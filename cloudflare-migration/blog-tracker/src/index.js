@@ -1,7 +1,7 @@
 // 구글시트(sheets.js) → D1(SQLite) 전환 (2026-09-01) — 매 요청마다 걸리던 Google OAuth 재인증 +
 // Sheets API 왕복이 없어지고, Worker 내부에서 로컬 SQLite 쿼리로 끝나 응답 속도가 크게 개선됨.
 // 클라이언트(js/common.js)는 전혀 수정 불필요 — 액션/응답 형태 100% 동일하게 유지.
-const ADMIN_ACTIONS = ['adminListUsers', 'adminUpdateUser', 'adminGetConfig', 'adminSetConfigValue', 'adminSetModels', 'adminSetCreditCost', 'adminAddAnnouncement', 'adminUpdateAnnouncement', 'adminDeleteAnnouncement'];
+const ADMIN_ACTIONS = ['adminListUsers', 'adminUpdateUser', 'adminGetConfig', 'adminSetConfigValue', 'adminSetModels', 'adminSetCreditCost', 'adminAddAnnouncement', 'adminUpdateAnnouncement', 'adminDeleteAnnouncement', 'adminListPosts', 'adminDeletePost'];
 const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus', 'creditHistory', 'creditQuote', 'getAnnouncements', ...ADMIN_ACTIONS];
 
 // 액션키별 기본 크레딧 소모량 — config_credit_costs 테이블에 값이 있으면 그쪽이 우선(코드 재배포
@@ -472,6 +472,20 @@ async function adminDeleteAnnouncement(env, id) {
   return { ok: true };
 }
 
+// ── 관리자: 전체 사용자 블로그 글 조회/삭제 ──────────────────────
+async function adminListPosts(env, n) {
+  const { results } = await env.DB.prepare(
+    'SELECT id, created_at, type, title, body, user_id FROM blog_posts ORDER BY id DESC LIMIT ?'
+  ).bind(Math.min(n || 200, 500)).all();
+  return { ok: true, posts: results.map((r) => ({ id: r.id, date: rowDateKST(r.created_at), type: r.type || '', title: r.title || '(제목 없음)', body: r.body || '', userId: r.user_id || '' })) };
+}
+
+async function adminDeletePost(env, id) {
+  if (!id) return { ok: false, error: 'id가 필요합니다.' };
+  await env.DB.prepare('DELETE FROM blog_posts WHERE id=?').bind(id).run();
+  return { ok: true };
+}
+
 // ── 네이버 블로그 본문 수집 (참고 URL 기능용) ──────────────────────
 function normalizeNaverMobileUrl(url) {
   const raw = (url || '').trim();
@@ -568,6 +582,8 @@ export default {
         if (data.action === 'adminAddAnnouncement') return jsonResponse(await adminAddAnnouncement(env, data.date || '', data.title || '', data.body || ''));
         if (data.action === 'adminUpdateAnnouncement') return jsonResponse(await adminUpdateAnnouncement(env, data.targetId || '', data.date || '', data.title || '', data.body || ''));
         if (data.action === 'adminDeleteAnnouncement') return jsonResponse(await adminDeleteAnnouncement(env, data.targetId || ''));
+        if (data.action === 'adminListPosts') return jsonResponse(await adminListPosts(env, data.n || 200));
+        if (data.action === 'adminDeletePost') return jsonResponse(await adminDeletePost(env, data.targetId || ''));
         if (data.action === 'adminListUsers') return jsonResponse(await adminListUsers(env));
         if (data.action === 'adminUpdateUser') return jsonResponse(await adminUpdateUser(env, data.targetId || '', data.patch || {}));
         if (data.action === 'adminGetConfig') return jsonResponse(await adminGetConfig(env));

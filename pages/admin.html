@@ -62,6 +62,28 @@
         </div>
       </div>
 
+      <div class="tool-section">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div class="sec-title" style="margin:0;">블로그 글 관리 (전체 사용자)</div>
+          <input class="blog-input" id="admin-post-filter" placeholder="아이디·제목으로 검색" style="width:240px;" oninput="adminRenderPosts()">
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--bdr);color:var(--mut);text-align:left;">
+                <th style="padding:10px;width:100px;">작성자</th>
+                <th style="padding:10px;width:100px;">날짜</th>
+                <th style="padding:10px;">제목</th>
+                <th style="padding:10px;width:90px;">유형</th>
+                <th style="padding:10px;width:140px;"></th>
+              </tr>
+            </thead>
+            <tbody id="admin-post-body"></tbody>
+          </table>
+        </div>
+        <div id="admin-post-detail" style="margin-top:10px;"></div>
+      </div>
+
       <div id="admin-alert" class="blog-alert err"></div>
     </div>
   </div><!-- /page-admin -->
