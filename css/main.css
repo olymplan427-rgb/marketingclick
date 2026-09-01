@@ -408,10 +408,19 @@ canvas{display:block;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.15);cu
 .ms-modal-close:hover{background:#f3f4f6;color:var(--txt);}
 .ms-modal-body{padding:16px 20px;overflow-y:auto;}
 
-/* ── 로그인 화면 ── */
-.login-promo-banner{display:flex;align-items:center;gap:8px;background:var(--acc-light);color:var(--acc);font-size:14px;font-weight:600;padding:14px 20px;border-radius:12px;margin-bottom:24px;}
+/* ── 로그인 화면(2분할) ── */
+.login-brand-panel{flex:1;min-width:0;background:var(--heading);color:#fff;display:flex;flex-direction:column;justify-content:center;padding:60px 64px;}
+.login-brand-name{font-size:14px;font-weight:700;color:rgba(255,255,255,.7);margin-bottom:20px;}
+.login-brand-headline{font-size:32px;font-weight:800;line-height:1.35;letter-spacing:-.02em;margin-bottom:16px;}
+.login-brand-sub{font-size:14px;color:rgba(255,255,255,.65);line-height:1.6;margin-bottom:28px;}
+.login-brand-feature{display:flex;align-items:center;gap:10px;font-size:13px;color:rgba(255,255,255,.85);margin-bottom:10px;}
+.login-brand-feature-icon{width:20px;height:20px;border-radius:6px;background:rgba(255,255,255,.12);display:inline-flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;}
+.login-form-panel{flex:1;min-width:0;background:var(--bg);display:flex;align-items:center;justify-content:center;}
+.login-promo-banner{display:flex;align-items:center;gap:8px;background:var(--acc-light);color:var(--acc);font-size:14px;font-weight:600;padding:14px 20px;border-radius:12px;margin-bottom:16px;}
 .login-promo-icon{font-size:16px;}
-.login-card{background:var(--sur);border:1px solid var(--bdr);border-radius:16px;padding:32px;}
+@media(max-width:880px){
+  .login-brand-panel{display:none;}
+}
 
 /* ── 베타 시작 안내 모달 ── */
 .beta-intro-card{position:relative;width:400px;max-width:90vw;max-height:90vh;overflow-y:auto;background:#fff;border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.10),0 4px 8px rgba(0,0,0,.04);padding:32px 28px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;}
