@@ -435,14 +435,13 @@ canvas{display:block;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.15);cu
 .guide-toc-panel{width:220px;min-width:220px;flex-shrink:0;overflow-y:auto;padding:20px 12px;margin:0;border-right:1px solid var(--bdr);background:var(--sur);}
 .guide-toc-item{padding:8px 10px;border-radius:8px;font-size:13px;color:var(--txt);cursor:pointer;line-height:1.4;}
 .guide-toc-item:hover{background:var(--hover);}
+.guide-toc-item.active{background:var(--hover);font-weight:700;color:var(--acc);}
 .guide-section-title{font-size:17px;font-weight:900;color:var(--heading);margin-bottom:6px;}
 .guide-section-desc{font-size:13px;color:var(--mut);line-height:1.6;margin-bottom:14px;}
 .guide-shot{width:100%;border:1px solid var(--bdr);border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:14px;display:block;}
 .guide-steps{display:flex;flex-direction:column;gap:8px;}
 .guide-step{font-size:13px;color:var(--txt);line-height:1.6;padding:10px 14px;background:var(--sur);border:1px solid var(--bdr);border-radius:8px;}
 .guide-tip{margin-top:12px;font-size:12.5px;color:var(--acc);background:var(--acc-light);border-radius:8px;padding:10px 14px;line-height:1.6;}
-.guide-section{scroll-margin-top:16px;padding-bottom:8px;border-bottom:1px solid var(--bdr);}
-.guide-section:last-child{border-bottom:none;}
 
 /* ── 홈 페이지 ── */
 #page-home{flex:1;overflow-y:auto;}
