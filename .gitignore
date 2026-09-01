@@ -10,6 +10,7 @@ monitor-pipeline/**/__pycache__/
 .claude/
 CLAUDE.md
 SECRETS.md
+BETA_REVIEW_TODO.md
 DB.xlsx
 mon_data_new.js
 mon_data_preview.json
