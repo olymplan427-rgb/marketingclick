@@ -60,6 +60,11 @@ function showPage(id) {
     if (lp) { lp.classList.remove('mode-list'); lp.classList.add('mode-free'); }
     p2State.templateKey = 'free';
     p2render();
+  } else if (id === 'home') {
+    document.getElementById('page-home').classList.add('active');
+    var navHome = document.getElementById('nav-home');
+    if (navHome) navHome.classList.add('active');
+    if (typeof homeInit === 'function') homeInit();
   } else if (id === 'blog' || id === 'blog-history' || id === 'blog-news') {
     document.getElementById('page-blog').classList.add('active');
     var navWrite = document.getElementById('nav-blog-write');
@@ -306,22 +311,9 @@ function hideLoginOverlay() {
   var nameEl = document.getElementById('login-user-name');
   var auth = getUserAuth();
   if (nameEl && auth) nameEl.textContent = auth.name + (auth.academy ? ' · ' + auth.academy : '');
-  maybeShowBetaIntro();
   if (typeof creditUpdateBadge === 'function') creditUpdateBadge();
   applyAdminVisibility();
-}
-
-// ── 베타 시작 안내 모달 — "다시 보지 않기" 체크 시 계정별로 재노출 안 함 ──
-function maybeShowBetaIntro() {
-  if (localStorage.getItem(_authKey('beta_intro_dismissed')) === '1') return;
-  var el = document.getElementById('beta-intro-overlay');
-  if (el) el.style.display = 'flex';
-}
-function closeBetaIntro() {
-  var chk = document.getElementById('beta-intro-dont-show');
-  if (chk && chk.checked) localStorage.setItem(_authKey('beta_intro_dismissed'), '1');
-  var el = document.getElementById('beta-intro-overlay');
-  if (el) el.style.display = 'none';
+  if (typeof homeInit === 'function') homeInit();
 }
 function initLoginGate() {
   _checkAutoLogout();
@@ -879,4 +871,4 @@ function _igUpdateStatus() {
 
 applyFeatureFlags();
 initLoginGate();
-showPage('blog'); // 로그인 후 첫 화면을 블로그로 (index.html/pages의 기본 active 상태와 맞춤)
+showPage('home'); // 로그인 후 첫 화면을 홈으로 (index.html/pages의 기본 active 상태와 맞춤)

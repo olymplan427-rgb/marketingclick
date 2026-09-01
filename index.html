@@ -20,8 +20,11 @@
     <div class="sidebar-brand"><span>마케팅딸깍</span></div>
   </div>
   <div class="sidebar-nav">
+    <div class="sidebar-item active" onclick="showPage('home')" id="nav-home">
+      <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg></span>홈
+    </div>
     <div class="sidebar-section-title">블로그</div>
-    <div class="sidebar-item active" onclick="showPage('blog')" id="nav-blog-write">
+    <div class="sidebar-item" onclick="showPage('blog')" id="nav-blog-write">
       <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 20l4-1 10-10-3-3L5 16l-1 4z"/><path d="M14 7l3 3"/></svg></span>작성
     </div>
     <div class="sidebar-item" onclick="showPage('blog-history')" id="nav-blog-history">
@@ -143,33 +146,6 @@
   </div>
 </div>
 
-<!-- 베타 시작 안내 모달 — mathclick(수학딸깍) 구조 그대로, 텍스트는 추후 수정 예정 -->
-<div id="beta-intro-overlay" style="display:none;position:fixed;inset:0;z-index:2500;background:rgba(17,17,17,.4);align-items:center;justify-content:center;">
-  <div class="beta-intro-card">
-    <button type="button" class="beta-intro-close" onclick="closeBetaIntro()">✕</button>
-    <div class="beta-intro-badge">BETA</div>
-    <div class="beta-intro-icon">🚀</div>
-    <div class="beta-intro-title">마케팅딸깍 베타 서비스를 시작합니다</div>
-    <div class="beta-intro-sub">먼저 만나보고, 원장님의 의견으로 더 좋은 마케팅딸깍을 함께 만들어주세요.</div>
-    <div class="beta-intro-highlight">
-      <span class="beta-intro-highlight-icon">🎁</span>
-      <div>
-        <div class="beta-intro-highlight-title">베타 기간 안내</div>
-        <div class="beta-intro-highlight-desc">베타 기간 동안 일부 기능이 계속 업데이트될 수 있어요.</div>
-      </div>
-    </div>
-    <div class="beta-intro-list">
-      <div class="beta-intro-list-item"><span class="beta-intro-check">✓</span>안내 문구 1 (추후 수정)</div>
-      <div class="beta-intro-list-item"><span class="beta-intro-check">✓</span>안내 문구 2 (추후 수정)</div>
-      <div class="beta-intro-list-item"><span class="beta-intro-check">✓</span>안내 문구 3 (추후 수정)</div>
-    </div>
-    <label class="beta-intro-dont-show">
-      <input type="checkbox" id="beta-intro-dont-show" /> 다시 보지 않기
-    </label>
-    <button type="button" class="btn btn-primary" style="width:100%;" onclick="closeBetaIntro()">확인하고 시작하기</button>
-  </div>
-</div>
-
 <div id="toast" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 20px;border-radius:99px;font-size:13px;z-index:2000;pointer-events:none;"></div>
 
 <!-- 크레딧 소모 확인 팝업 — useCreditConfirm()(js/common.js)이 열고 닫음 -->
@@ -196,7 +172,7 @@
 <script>
 (function() {
   var container = document.getElementById('main-container');
-  var pages = ['pages/image.html', 'pages/blog.html', 'pages/monitor.html', 'pages/mapsearch.html', 'pages/report.html', 'pages/schoolshare.html', 'pages/credit.html', 'pages/feedback.html', 'pages/settings.html', 'pages/admin.html'];
+  var pages = ['pages/home.html', 'pages/image.html', 'pages/blog.html', 'pages/monitor.html', 'pages/mapsearch.html', 'pages/report.html', 'pages/schoolshare.html', 'pages/credit.html', 'pages/feedback.html', 'pages/settings.html', 'pages/admin.html'];
   pages.forEach(function(url) {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, false); // synchronous — 로컬 서버 전용
@@ -226,6 +202,7 @@
 <script src="js/credit.js"></script>
 <script src="js/feedback.js"></script>
 <script src="js/admin.js"></script>
+<script src="js/home.js"></script>
 <script src="js/common.js"></script>
 </body>
 </html>
