@@ -1,7 +1,7 @@
 // 관리자 페이지 — AI 프로바이더 키/모델, 기능별 크레딧 비용, 사용자 관리(D1 직접 반영).
 // 서버(blog-tracker Worker)가 role==='관리자' 아니면 모든 admin* 액션을 거부하므로,
 // 여기서는 sidebar 노출 + 편의 UI만 담당(applyAdminVisibility는 js/common.js).
-var adminState = { config: null, users: [], notices: [] };
+var adminState = { config: null, users: [], notices: [], posts: [], selectedPostId: null };
 
 function adminEsc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -18,14 +18,16 @@ function adminShowError(msg) {
 async function adminInit() {
   adminShowError('');
   try {
-    var [config, users, notices] = await Promise.all([adminGetConfig(), adminListUsers(), getAnnouncements()]);
+    var [config, users, notices, posts] = await Promise.all([adminGetConfig(), adminListUsers(), getAnnouncements(), adminListPosts()]);
     adminState.config = config;
     adminState.users = users;
     adminState.notices = notices;
+    adminState.posts = posts;
     adminRenderAiList();
     adminRenderCreditCosts();
     adminRenderUsers();
     adminRenderNotices();
+    adminRenderPosts();
     var dateEl = document.getElementById('admin-notice-date');
     if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
   } catch (e) {
@@ -214,5 +216,60 @@ async function adminSaveUser(id) {
     await adminInit();
   } catch (e) {
     adminShowError(e.message || '저장 실패');
+  }
+}
+
+// ── 블로그 글 관리 (전체 사용자) ───────────────────────────────
+function adminRenderPosts() {
+  var body = document.getElementById('admin-post-body');
+  if (!body) return;
+  var filterEl = document.getElementById('admin-post-filter');
+  var filter = filterEl ? filterEl.value.trim().toLowerCase() : '';
+  var list = adminState.posts.filter(function(p) {
+    if (!filter) return true;
+    return (p.userId || '').toLowerCase().indexOf(filter) !== -1 || (p.title || '').toLowerCase().indexOf(filter) !== -1;
+  });
+  if (!list.length) { body.innerHTML = '<tr><td colspan="5" style="padding:10px;color:var(--mut);">글이 없습니다.</td></tr>'; return; }
+  body.innerHTML = list.map(function(p) {
+    return '<tr style="border-bottom:1px solid var(--bdr);">'
+      + '<td style="padding:10px;font-weight:700;">' + adminEsc(p.userId) + '</td>'
+      + '<td style="padding:10px;color:var(--mut);">' + adminEsc(p.date) + '</td>'
+      + '<td style="padding:10px;">' + adminEsc(p.title) + '</td>'
+      + '<td style="padding:10px;color:var(--mut);">' + adminEsc(p.type) + '</td>'
+      + '<td style="padding:10px;white-space:nowrap;">'
+        + '<button class="btn" onclick="adminTogglePostDetail(' + p.id + ')">보기</button> '
+        + '<button class="btn" onclick="adminDeletePostRow(' + p.id + ')">삭제</button>'
+      + '</td>'
+    + '</tr>';
+  }).join('');
+}
+
+function adminTogglePostDetail(id) {
+  var el = document.getElementById('admin-post-detail');
+  if (!el) return;
+  if (adminState.selectedPostId === id) { adminState.selectedPostId = null; el.innerHTML = ''; return; }
+  adminState.selectedPostId = id;
+  var post = adminState.posts.filter(function(p) { return p.id === id; })[0];
+  if (!post) return;
+  el.innerHTML = '<div class="blog-card">'
+    + '<div style="font-size:12px;color:var(--mut);margin-bottom:6px;">' + adminEsc(post.userId) + ' · ' + adminEsc(post.date) + ' · ' + adminEsc(post.type) + '</div>'
+    + '<div style="font-size:14px;font-weight:800;color:var(--txt);margin-bottom:8px;">' + adminEsc(post.title) + '</div>'
+    + '<div style="font-size:13px;color:var(--txt);line-height:1.7;white-space:pre-wrap;max-height:400px;overflow-y:auto;">' + adminEsc(post.body) + '</div>'
+  + '</div>';
+}
+
+async function adminDeletePostRow(id) {
+  if (!confirm('이 글을 삭제할까요? 되돌릴 수 없습니다.')) return;
+  try {
+    await adminDeletePost(id);
+    adminState.posts = adminState.posts.filter(function(p) { return p.id !== id; });
+    if (adminState.selectedPostId === id) {
+      adminState.selectedPostId = null;
+      document.getElementById('admin-post-detail').innerHTML = '';
+    }
+    adminRenderPosts();
+    adminShowError('');
+  } catch (e) {
+    adminShowError(e.message || '삭제 실패');
   }
 }
