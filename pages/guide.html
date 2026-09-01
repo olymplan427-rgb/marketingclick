@@ -1,5 +1,6 @@
 
-  <!-- PAGE GUIDE — 베타 공개 기능 사용법. 좌측 목차 클릭 시 해당 섹션만 표시(탭 방식) -->
+  <!-- PAGE GUIDE — 베타 공개 기능 사용법. 좌측 목차 클릭 시 해당 섹션만 표시(탭 방식).
+       스크린샷은 항목(단계)별로 작게 잘라서 각 설명 옆에 배치 — 큰 통짜 이미지 지양. -->
   <div class="page" id="page-guide">
     <div class="page-topbar"><div class="page-topbar-title">사용법 가이드</div></div>
     <div class="page-row" style="overflow:hidden;">
@@ -17,7 +18,7 @@
       </div>
 
       <div class="blog-right" id="guide-scroll-area">
-        <div style="max-width:720px;">
+        <div style="max-width:640px;">
 
           <div class="guide-section" id="g-overview">
             <div class="guide-section-title">시작하기 전에</div>
@@ -27,13 +28,18 @@
 
           <div class="guide-section" id="g-blog-write" style="display:none;">
             <div class="guide-section-title">블로그 작성</div>
-            <div class="guide-section-desc">주제와 키워드만 입력하면 네이버 블로그에 바로 붙여넣을 수 있는 완성 글과 이미지 프롬프트까지 한 번에 만들어줍니다. 화면에 표시된 번호 순서대로 진행하세요.</div>
-            <img class="guide-shot" src="images/guide/02_blog_write.png" alt="블로그 작성 화면">
+            <div class="guide-section-desc">주제와 키워드만 입력하면 네이버 블로그에 바로 붙여넣을 수 있는 완성 글과 이미지 프롬프트까지 한 번에 만들어줍니다.</div>
+            <div class="guide-step-row">
+              <img class="guide-step-shot" src="images/guide/blog_step1_profile.png" alt="학원 프로필">
+              <div class="guide-step-text"><b>학원 프로필 입력 (최초 1회)</b><br>학원명·주요 키워드·과목·주소 등을 입력하고 저장합니다. 여러 지점이 있다면 "+ 새 프로필"로 추가할 수 있습니다.</div>
+            </div>
+            <div class="guide-step-row">
+              <img class="guide-step-shot" src="images/guide/blog_step2_info.png" alt="글 작성 정보">
+              <div class="guide-step-text"><b>글 작성 정보 입력</b><br>글 유형(교육칼럼/입시정보/학원홍보 등), 분위기, 주제, 타겟 독자층, 키워드를 입력합니다. 자유 서술로 대략 적고 "AI 분석해서 아래 채우기"를 누르면 항목이 자동으로 채워집니다.</div>
+            </div>
             <div class="guide-steps">
-              <div class="guide-step"><b>1. 학원 프로필 입력 (최초 1회)</b> — 학원명·주요 키워드·과목·주소 등을 입력하고 저장합니다. 여러 지점이 있다면 "+ 새 프로필"로 추가할 수 있습니다.</div>
-              <div class="guide-step"><b>2. 글 작성 정보 입력</b> — 글 유형(교육칼럼/입시정보/학원홍보 등), 분위기, 주제, 타겟 독자층, 키워드를 입력합니다. 자유 서술로 대략 적고 "AI 분석해서 아래 채우기"를 누르면 항목이 자동으로 채워집니다.</div>
-              <div class="guide-step"><b>3. Step 2 — 변형 요소 확인/수정</b> — AI가 제안한 소제목·구성을 확인하고 원하는 대로 수정합니다.</div>
-              <div class="guide-step"><b>4. Step 3 — 완성 글 확인</b> — 완성된 본문과 썸네일/본문 이미지 프롬프트를 확인하고 [복사] 버튼으로 순수 텍스트만 복사해 네이버 SmartEditor에 붙여넣습니다.</div>
+              <div class="guide-step"><b>Step 2 — 변형 요소 확인/수정</b>: AI가 제안한 소제목·구성을 확인하고 원하는 대로 수정합니다.</div>
+              <div class="guide-step"><b>Step 3 — 완성 글 확인</b>: 완성된 본문과 썸네일/본문 이미지 프롬프트를 확인하고 [복사] 버튼으로 순수 텍스트만 복사해 네이버 SmartEditor에 붙여넣습니다.</div>
             </div>
             <div class="guide-tip">💡 [복사] 버튼은 서식 없는 순수 텍스트만 복사하기 때문에 SmartEditor에 붙여넣어도 폰트·스타일이 깨지지 않습니다.</div>
           </div>
@@ -61,37 +67,57 @@
 
           <div class="guide-section" id="g-mapsearch" style="display:none;">
             <div class="guide-section-title">주변 학원 검색</div>
-            <div class="guide-section-desc">학원 프로필의 위치를 기준으로 반경 내 경쟁 수학학원을 찾고, 각 학원의 블로그 리뷰 보유 여부까지 함께 확인합니다. 화면에 표시된 번호 순서대로 진행하세요.</div>
-            <img class="guide-shot" src="images/guide/05_mapsearch.png" alt="주변 학원 검색 화면">
-            <div class="guide-steps">
-              <div class="guide-step"><b>1. 기준 위치</b> — 학원 프로필을 선택합니다. 주소가 등록되어 있으면 더 정확하게 검색됩니다.</div>
-              <div class="guide-step"><b>2. 검색 반경</b> — 500m/1km/2km 중 선택합니다.</div>
-              <div class="guide-step"><b>3. 검색 키워드</b> — 기본값은 "수학학원"이며 필요시 수정합니다.</div>
-              <div class="guide-step"><b>4. 주변 학원 검색</b> — 버튼을 누르면 인근 학원 목록과 블로그 리뷰 보유 여부가 표시됩니다. 블로그가 있는 학원은 클릭해서 리뷰 글을 모아볼 수 있습니다.</div>
+            <div class="guide-section-desc">학원 프로필의 위치를 기준으로 반경 내 경쟁 수학학원을 찾고, 각 학원의 블로그 리뷰 보유 여부까지 함께 확인합니다. 아래 번호 순서대로 진행하세요.</div>
+            <div class="guide-step-row">
+              <img class="guide-step-shot" src="images/guide/ms_step1_location.png" alt="기준 위치">
+              <div class="guide-step-text"><b>기준 위치</b><br>학원 프로필을 선택합니다. 주소가 등록되어 있으면 더 정확하게 검색됩니다.</div>
+            </div>
+            <div class="guide-step-row">
+              <img class="guide-step-shot" src="images/guide/ms_step2_radius.png" alt="검색 반경">
+              <div class="guide-step-text"><b>검색 반경</b><br>500m/1km/2km 중 선택합니다.</div>
+            </div>
+            <div class="guide-step-row">
+              <img class="guide-step-shot" src="images/guide/ms_step3_keyword.png" alt="검색 키워드">
+              <div class="guide-step-text"><b>검색 키워드</b><br>기본값은 "수학학원"이며 필요시 수정합니다.</div>
+            </div>
+            <div class="guide-step-row">
+              <img class="guide-step-shot" src="images/guide/ms_step4_search.png" alt="주변 학원 검색 버튼">
+              <div class="guide-step-text"><b>주변 학원 검색</b><br>버튼을 누르면 인근 학원 목록과 블로그 리뷰 보유 여부가 표시됩니다. 블로그가 있는 학원은 클릭해서 리뷰 글을 모아볼 수 있습니다.</div>
             </div>
             <div class="guide-tip">💡 정확도를 높이려면 "블로그 작성" Step 1에서 학원 주소를 미리 등록해두세요.</div>
           </div>
 
           <div class="guide-section" id="g-report" style="display:none;">
             <div class="guide-section-title">지역 트렌드 리포트</div>
-            <div class="guide-section-desc">우리 학원이 속한 지역(구/군/시)의 수학학원들이 최근 3개월간 진행한 이벤트·이슈를 블로그에서 모아 트렌드와 콘텐츠 주제까지 정리합니다. 화면에 표시된 번호 순서대로 진행하세요.</div>
-            <img class="guide-shot" src="images/guide/06_report.png" alt="지역 트렌드 리포트 화면">
-            <div class="guide-steps">
-              <div class="guide-step"><b>1. 조회 지역</b> — 자동 추출되지 않으면 직접 입력합니다 (예: 중랑구).</div>
-              <div class="guide-step"><b>2. 리포트 생성</b> — 버튼을 누르면 언급량 추이, 주요 학원 프로필, 콘텐츠 패턴, 시사점, 블로그 주제 추천이 순서대로 표시됩니다.</div>
+            <div class="guide-section-desc">우리 학원이 속한 지역(구/군/시)의 수학학원들이 최근 3개월간 진행한 이벤트·이슈를 블로그에서 모아 트렌드와 콘텐츠 주제까지 정리합니다.</div>
+            <div class="guide-step-row">
+              <img class="guide-step-shot" src="images/guide/report_step1_region.png" alt="조회 지역">
+              <div class="guide-step-text"><b>조회 지역</b><br>자동 추출되지 않으면 직접 입력합니다 (예: 중랑구).</div>
+            </div>
+            <div class="guide-step-row">
+              <img class="guide-step-shot" src="images/guide/report_step2_generate.png" alt="리포트 생성 버튼">
+              <div class="guide-step-text"><b>리포트 생성</b><br>버튼을 누르면 언급량 추이, 주요 학원 프로필, 콘텐츠 패턴, 시사점, 블로그 주제 추천이 순서대로 표시됩니다.</div>
             </div>
             <div class="guide-tip">💡 리포트 하단 추천 주제 카드의 "이 주제로 쓰기"를 누르면 블로그 작성으로 바로 이어집니다.</div>
           </div>
 
           <div class="guide-section" id="g-image" style="display:none;">
             <div class="guide-section-title">이미지 만들기 (성적우수)</div>
-            <div class="guide-section-desc">배경을 고르고 합격자 명단을 붙여넣으면 인스타그램 게시용 성적우수 이미지가 바로 완성됩니다. 화면에 표시된 번호 순서대로 진행하세요.</div>
-            <img class="guide-shot" src="images/guide/07_image.png" alt="이미지 만들기 화면">
+            <div class="guide-section-desc">배경을 고르고 합격자 명단을 붙여넣으면 인스타그램 게시용 성적우수 이미지가 바로 완성됩니다.</div>
+            <div class="guide-step-row">
+              <img class="guide-step-shot" src="images/guide/img_step1_bg.png" alt="배경 선택">
+              <div class="guide-step-text"><b>배경 선택</b><br>준비된 배경 중 하나를 고르거나 "+ 이미지 추가"로 직접 업로드합니다.</div>
+            </div>
+            <div class="guide-step-row">
+              <img class="guide-step-shot" src="images/guide/img_step2_text.png" alt="제목 텍스트 편집">
+              <div class="guide-step-text"><b>제목 텍스트 편집</b><br>"+ 텍스트 추가"로 원하는 문구를 넣고 위치·글꼴을 조정합니다.</div>
+            </div>
+            <div class="guide-step-row">
+              <img class="guide-step-shot" src="images/guide/img_step3_list.png" alt="명단 입력">
+              <div class="guide-step-text"><b>명단 입력</b><br>학교명/이름을 줄바꿈으로 입력하거나 엑셀에서 복사해 붙여넣습니다. 2열/3열 레이아웃을 선택할 수 있습니다.</div>
+            </div>
             <div class="guide-steps">
-              <div class="guide-step"><b>1. 배경 선택</b> — 준비된 배경 중 하나를 고르거나 "+ 이미지 추가"로 직접 업로드합니다.</div>
-              <div class="guide-step"><b>2. 제목 텍스트 편집</b> — "+ 텍스트 추가"로 원하는 문구를 넣고 위치·글꼴을 조정합니다.</div>
-              <div class="guide-step"><b>3. 명단 입력</b> — 학교명/이름을 줄바꿈으로 입력하거나 엑셀에서 복사해 붙여넣습니다. 2열/3열 레이아웃을 선택할 수 있습니다.</div>
-              <div class="guide-step"><b>4.</b> 오른쪽 미리보기에서 결과를 확인하고 "PNG 다운로드"로 저장합니다.</div>
+              <div class="guide-step">오른쪽 미리보기에서 결과를 확인하고 "PNG 다운로드"로 저장합니다.</div>
             </div>
           </div>
 
@@ -107,11 +133,14 @@
 
           <div class="guide-section" id="g-feedback" style="display:none;">
             <div class="guide-section-title">의견보내기 / 문의</div>
-            <div class="guide-section-desc">불편한 점이나 아이디어를 관리자에게 직접 전달할 수 있는 게시판입니다. 작성한 글은 본인과 관리자만 볼 수 있습니다. 화면에 표시된 번호 순서대로 진행하세요.</div>
-            <img class="guide-shot" src="images/guide/09_feedback.png" alt="의견보내기 화면">
-            <div class="guide-steps">
-              <div class="guide-step"><b>1.</b> 내용을 입력합니다.</div>
-              <div class="guide-step"><b>2. 등록</b> — 버튼을 누르면 문의가 등록되고, 관리자가 답변을 남기면 같은 스레드에 이어서 표시됩니다.</div>
+            <div class="guide-section-desc">불편한 점이나 아이디어를 관리자에게 직접 전달할 수 있는 게시판입니다. 작성한 글은 본인과 관리자만 볼 수 있습니다.</div>
+            <div class="guide-step-row">
+              <img class="guide-step-shot" src="images/guide/fb_step1_content.png" alt="문의 내용 입력">
+              <div class="guide-step-text"><b>내용 입력</b><br>문의하실 내용을 작성합니다.</div>
+            </div>
+            <div class="guide-step-row">
+              <img class="guide-step-shot" src="images/guide/fb_step2_submit.png" alt="등록 버튼">
+              <div class="guide-step-text"><b>등록</b><br>버튼을 누르면 문의가 등록되고, 관리자가 답변을 남기면 같은 스레드에 이어서 표시됩니다.</div>
             </div>
             <div class="guide-tip">💡 급한 문의는 사이드바 "문의하기"(카카오톡 채널)를 이용해주세요.</div>
           </div>
