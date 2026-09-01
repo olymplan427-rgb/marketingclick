@@ -1,14 +1,17 @@
 // gas/blog_tracker.gs 이전 — 블로그 저장/조회 + 로그인/사용량 제한 + Claude·Gemini·OpenAI 프록시.
 // 클라이언트(js/common.js)는 전혀 수정 불필요 — GAS 웹앱 URL 자리에 이 워커의 URL만 넣으면 됨.
-import { getValues, appendRow, updateRow, getSheetRowCount } from './sheets.js';
+import { getValues, appendRow, updateRow, getSheetRowCount, ensureSheetExists } from './sheets.js';
 
 const USERS_SHEET = 'users';
 const BLOG_SHEET = 'blog_posts';
 const FEEDBACK_SHEET = 'feedback';
-const DAILY_BLOG_LIMIT = 5;
-const RECENT_SCAN_ROWS = 500;
+const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus'];
 
-const AUTHED_ACTIONS = ['login', 'myPosts', 'quotaStatus', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch'];
+// 액션키별 기본 크레딧 소모량 — config 시트 G/H열("액션키"/"크레딧비용")에 값이 있으면 그쪽이 우선(코드
+// 재배포 없이 관리자가 조정 가능, 기존 모델 카탈로그 표와 동일한 패턴). 시트에 없을 때만 이 기본값 사용.
+const CREDIT_COST_DEFAULTS = {
+  blog_generate: 3, blog_analyze: 1, blog_finalize: 3, image_promo: 1, mapsearch_search: 1, news_search: 1, report_generate: 5
+};
 const SCHOOL_SHARE_SHEET = 'school_share';
 
 // ── AI 설정 — gas/blog_tracker.gs에서 그대로 포팅 (전부 "config" 시트 하나로 관리) ──
@@ -54,21 +57,22 @@ function rowDateKST(val) {
 }
 
 // ── users 시트 ──────────────────────────────────────────────────
+// A~F: id/password/name/academy/status/role (기존 그대로, 일일한도 컬럼은 2026-09 삭제됨)
+// G~I: 월크레딧/잔여크레딧/크레딧리셋월(크레딧 시스템 전용) — rowNumber/raw는 useCredit()이 해당
+// 행을 덮어쓸 때(updateRow) 다른 컬럼값을 보존하기 위해 필요.
 async function findUser(env, id) {
-  const rows = await getValues(env, USERS_SHEET + '!A2:G');
-  for (const r of rows) {
+  const rows = await getValues(env, USERS_SHEET + '!A2:I');
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
     if (String(r[0]) === String(id)) {
-      return { id: r[0], password: r[1], name: r[2], academy: r[3], status: r[4], role: r[5], dailyLimit: r[6] };
+      return {
+        id: r[0], password: r[1], name: r[2], academy: r[3], status: r[4], role: r[5],
+        monthlyCredit: r[6], remainingCredit: r[7], creditResetMonth: r[8],
+        rowNumber: i + 2, raw: r
+      };
     }
   }
   return null;
-}
-
-function getDailyLimitFor(user) {
-  if (!user) return DAILY_BLOG_LIMIT;
-  if (String(user.role) === '관리자') return null; // 무제한
-  const n = parseInt(user.dailyLimit, 10);
-  return (!isNaN(n) && n > 0) ? n : DAILY_BLOG_LIMIT;
 }
 
 async function registerUser(env, id, password, name, academy, site) {
@@ -76,7 +80,7 @@ async function registerUser(env, id, password, name, academy, site) {
   if (site === 'dev') return { ok: false, error: '이 주소는 개발용입니다. 정식 주소에서 가입해주세요.' };
   const existing = await findUser(env, id);
   if (existing) return { ok: false, error: '이미 사용 중인 아이디입니다.' };
-  await appendRow(env, USERS_SHEET, [id, password, name, academy, '사용', '', DAILY_BLOG_LIMIT]);
+  await appendRow(env, USERS_SHEET, [id, password, name, academy, '사용', '']); // 월크레딧(G)은 비워둠 = 무제한
   return { ok: true };
 }
 
@@ -90,23 +94,6 @@ async function verifyUser(env, id, password, site) {
 }
 
 // ── blog_posts 시트 ─────────────────────────────────────────────
-async function recentBlogRows(env) {
-  const lastRow = await getSheetRowCount(env, BLOG_SHEET);
-  const startRow = Math.max(2, lastRow - RECENT_SCAN_ROWS + 1);
-  return getValues(env, BLOG_SHEET + '!A' + startRow + ':M' + lastRow);
-}
-
-// 컬럼 순서: 날짜(0)~구조(8), 목표분량(9), 섹션가이드(10), 프롬프트버전(11), 작성자(12)
-async function countTodayPosts(env, userId) {
-  const rows = await recentBlogRows(env);
-  const today = todayKST();
-  let count = 0;
-  for (const row of rows) {
-    if (rowDateKST(row[0]) === today && String(row[12] || '') === String(userId)) count++;
-  }
-  return count;
-}
-
 async function getMyPosts(env, userId, n) {
   const rows = await getValues(env, BLOG_SHEET + '!A2:M');
   return rows
@@ -119,21 +106,73 @@ async function getMyPosts(env, userId, n) {
     }));
 }
 
-async function getQuotaStatus(env, userId) {
-  const count = await countTodayPosts(env, userId);
-  const limit = getDailyLimitFor(await findUser(env, userId));
-  if (limit === null) return { ok: true, count, limit: null, remaining: null, unlimited: true };
-  return { ok: true, count, limit, remaining: Math.max(0, limit - count), unlimited: false };
+// ── 크레딧 시스템 (2026-09) ─────────────────────────────────────
+// config 시트 H/I열("액션키"/"크레딧비용")에 값이 있으면 그쪽 우선, 없으면 CREDIT_COST_DEFAULTS.
+// 액션키로 넣을 값(코드가 실제로 보내는 키 그대로): blog_generate, image_promo, mapsearch_search,
+// news_search, report_generate — 각 행에 이 문자열을 그대로 입력해야 인식됨.
+async function getCreditCost(env, actionKey) {
+  const rows = await getValues(env, CONFIG_SHEET + '!H2:I');
+  for (const r of rows) {
+    if (String(r[0] || '').trim() === actionKey && r[1] !== undefined && String(r[1]).trim() !== '') {
+      const n = parseInt(r[1], 10);
+      if (!isNaN(n)) return n;
+    }
+  }
+  return CREDIT_COST_DEFAULTS[actionKey] || 1;
+}
+
+function monthKST() {
+  return todayKST().substring(0, 7); // 'YYYY-MM'
+}
+
+// users 시트 H(월크레딧)이 비어있으면 무제한 취급 — 관리자가 아직 값을 채우지 않은 기존 계정도
+// 이번 변경으로 갑자기 막히지 않도록 하는 안전한 기본값.
+async function useCredit(env, userId, actionKey) {
+  if (!actionKey) return { ok: false, error: 'actionKey가 필요합니다.' };
+  const u = await findUser(env, userId);
+  if (!u) return { ok: false, error: '사용자를 찾을 수 없습니다.' };
+  if (String(u.role) === '관리자') return { ok: true, unlimited: true };
+
+  const monthlyCredit = parseInt(u.monthlyCredit, 10);
+  if (isNaN(monthlyCredit) || monthlyCredit <= 0) return { ok: true, unlimited: true };
+
+  const cost = await getCreditCost(env, actionKey);
+  const currentMonth = monthKST();
+  let remaining = parseInt(u.remainingCredit, 10);
+  if (String(u.creditResetMonth || '') !== currentMonth || isNaN(remaining)) remaining = monthlyCredit; // lazy reset
+
+  if (remaining < cost) {
+    return { ok: false, error: '이번 달 크레딧이 부족합니다 (잔여 ' + remaining + ' / 필요 ' + cost + ').', remaining, monthlyCredit };
+  }
+
+  remaining -= cost;
+  const row = u.raw.slice();
+  while (row.length < 9) row.push('');
+  row[7] = remaining;
+  row[8] = currentMonth;
+  await updateRow(env, USERS_SHEET, u.rowNumber, row);
+  return { ok: true, remaining, monthlyCredit };
+}
+
+// 차감 없이 현재 잔여 크레딧만 조회(설정 화면 표시용) — lazy reset 여부만 계산해서 보여주고 시트는 안 건드림.
+async function getCreditStatus(env, userId) {
+  const u = await findUser(env, userId);
+  if (!u) return { ok: false, error: '사용자를 찾을 수 없습니다.' };
+  if (String(u.role) === '관리자') return { ok: true, unlimited: true };
+  const monthlyCredit = parseInt(u.monthlyCredit, 10);
+  if (isNaN(monthlyCredit) || monthlyCredit <= 0) return { ok: true, unlimited: true };
+  const currentMonth = monthKST();
+  let remaining = parseInt(u.remainingCredit, 10);
+  if (String(u.creditResetMonth || '') !== currentMonth || isNaN(remaining)) remaining = monthlyCredit;
+  return { ok: true, unlimited: false, remaining, monthlyCredit };
 }
 
 async function savePost(env, data) {
   if (data.userId) {
     const v = await verifyUser(env, data.userId, data.userPw, data.site);
     if (!v.valid) return { ok: false, error: v.error };
-    const limit = getDailyLimitFor(await findUser(env, data.userId));
-    if (limit !== null && (await countTodayPosts(env, data.userId)) >= limit) {
-      return { ok: false, error: '오늘 작성 가능 횟수(' + limit + '회)를 모두 사용했습니다.' };
-    }
+    // 일일한도 차단은 크레딧 시스템으로 대체됨(2026-09) — 실제 차단은 blog_generate
+    // 액션 호출 직전 useCredit()에서 처리. 여기선 더 이상 재검사하지 않는다.
   }
   await appendRow(env, BLOG_SHEET, [
     nowKST(), data.type || '', data.mood || '', data.topic || '', data.keywords || '',
@@ -213,6 +252,7 @@ async function findSchoolShareRow(env, userId) {
 
 async function loadSchoolShare(env, userId) {
   try {
+    await ensureSheetExists(env, SCHOOL_SHARE_SHEET);
     const found = await findSchoolShareRow(env, userId);
     return { ok: true, data: found ? found.row[2] : null };
   } catch (e) {
@@ -222,6 +262,7 @@ async function loadSchoolShare(env, userId) {
 
 async function saveSchoolShare(env, userId, jsonData) {
   try {
+    await ensureSheetExists(env, SCHOOL_SHARE_SHEET);
     const found = await findSchoolShareRow(env, userId);
     if (found) {
       await updateRow(env, SCHOOL_SHARE_SHEET, found.rowNumber, [nowKST(), userId, jsonData]);
@@ -432,7 +473,6 @@ export default {
         if (!v.valid) return jsonResponse({ ok: false, error: v.error });
         if (data.action === 'login') return jsonResponse({ ok: true, name: v.name, academy: v.academy, role: v.role || '' });
         if (data.action === 'myPosts') return jsonResponse({ ok: true, posts: await getMyPosts(env, data.userId, data.n || 100) });
-        if (data.action === 'quotaStatus') return jsonResponse(await getQuotaStatus(env, data.userId));
         if (data.action === 'claudeProxy') return aiJsonResponse(await claudeProxy(env, data.payload));
         if (data.action === 'geminiProxy') return aiJsonResponse(await geminiProxy(env, data.payload));
         if (data.action === 'feedbackList') return jsonResponse(await getFeedbackThreads(env, data.userId, v.role || ''));
@@ -441,6 +481,8 @@ export default {
         if (data.action === 'loadSchoolShare') return jsonResponse(await loadSchoolShare(env, data.userId));
         if (data.action === 'saveSchoolShare') return jsonResponse(await saveSchoolShare(env, data.userId, data.jsonData || ''));
         if (data.action === 'schoolShareSearch') return jsonResponse(await schoolShareSearch(env, data.sidoCode || '', data.sggCode || '', data.schulKndCode || ''));
+        if (data.action === 'useCredit') return jsonResponse(await useCredit(env, data.userId, data.actionKey || ''));
+        if (data.action === 'creditStatus') return jsonResponse(await getCreditStatus(env, data.userId));
       }
 
       if (data.token !== env.SHARED_TOKEN) return jsonResponse({ error: 'Unauthorized' });

@@ -63,6 +63,7 @@ async function newsSuggestTopics(btn) {
   if (resultEl) resultEl.innerHTML = '';
 
   try {
+    await useCredit('news_search');
     var fetched = await newsFetchEducationNews();
     var news = fetched.items;
 

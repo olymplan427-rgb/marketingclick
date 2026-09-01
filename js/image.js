@@ -1828,6 +1828,7 @@ function initAiPromoControls() {
         setAiStatus('이미지를 먼저 로드해주세요.', 'err');
         return;
       }
+      await useCredit('image_promo');
       var prompt = buildPromoPrompt();
       setAiStatus('홍보문구 생성 중… (최대 30초 소요)');
       var result = await callAiPromo(imageDataUrl, prompt);
