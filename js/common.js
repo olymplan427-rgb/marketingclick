@@ -129,6 +129,10 @@ function showPage(id) {
     var navFb = document.getElementById('nav-feedback');
     if (navFb) navFb.classList.add('active');
     if (typeof feedbackInit === 'function') feedbackInit();
+  } else if (id === 'guide') {
+    document.getElementById('page-guide').classList.add('active');
+    var navGd = document.getElementById('nav-guide');
+    if (navGd) navGd.classList.add('active');
   } else if (id === 'admin') {
     document.getElementById('page-admin').classList.add('active');
     var navAd = document.getElementById('nav-admin');
