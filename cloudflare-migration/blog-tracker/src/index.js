@@ -5,13 +5,20 @@ import { getValues, appendRow, updateRow, getSheetRowCount, ensureSheetExists } 
 const USERS_SHEET = 'users';
 const BLOG_SHEET = 'blog_posts';
 const FEEDBACK_SHEET = 'feedback';
-const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus'];
+const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus', 'creditHistory'];
 
 // 액션키별 기본 크레딧 소모량 — config 시트 G/H열("액션키"/"크레딧비용")에 값이 있으면 그쪽이 우선(코드
 // 재배포 없이 관리자가 조정 가능, 기존 모델 카탈로그 표와 동일한 패턴). 시트에 없을 때만 이 기본값 사용.
 const CREDIT_COST_DEFAULTS = {
   blog_generate: 3, blog_analyze: 1, blog_finalize: 3, image_promo: 1, mapsearch_search: 1, news_search: 1, report_generate: 5
 };
+// 크레딧 사용 내역(credit_log 시트)에 표시할 한글 이름 — config 시트에 관리자가 적어둔 이름과 통일.
+const ACTION_LABELS = {
+  blog_generate: '블로그 초안 생성', blog_analyze: 'AI자율분석', blog_finalize: '블로그 최종안 생성',
+  image_promo: '이미지 홍보문구 생성', mapsearch_search: '지도검색 블로그 취합',
+  news_search: '기사검색 주제 추천', report_generate: '지역 트렌드 리포트 생성'
+};
+const CREDIT_LOG_SHEET = 'credit_log';
 const SCHOOL_SHARE_SHEET = 'school_share';
 
 // ── AI 설정 — gas/blog_tracker.gs에서 그대로 포팅 (전부 "config" 시트 하나로 관리) ──
@@ -125,6 +132,13 @@ function monthKST() {
   return todayKST().substring(0, 7); // 'YYYY-MM'
 }
 
+// credit_log 시트(A~F: 일시/아이디/구분/사용항목/증감/잔액)에 매번 새 행만 추가하는
+// append-only 로그 — blog_posts/feedback과 동일 패턴(school_share의 upsert와는 다름).
+async function logCreditEvent(env, userId, type, item, delta, remaining) {
+  await ensureSheetExists(env, CREDIT_LOG_SHEET);
+  await appendRow(env, CREDIT_LOG_SHEET, [nowKST(), userId, type, item, delta, remaining]);
+}
+
 // users 시트 H(월크레딧)이 비어있으면 무제한 취급 — 관리자가 아직 값을 채우지 않은 기존 계정도
 // 이번 변경으로 갑자기 막히지 않도록 하는 안전한 기본값.
 async function useCredit(env, userId, actionKey) {
@@ -139,19 +153,33 @@ async function useCredit(env, userId, actionKey) {
   const cost = await getCreditCost(env, actionKey);
   const currentMonth = monthKST();
   let remaining = parseInt(u.remainingCredit, 10);
-  if (String(u.creditResetMonth || '') !== currentMonth || isNaN(remaining)) remaining = monthlyCredit; // lazy reset
+  const needsReset = String(u.creditResetMonth || '') !== currentMonth || isNaN(remaining);
+  if (needsReset) remaining = monthlyCredit; // lazy reset
 
   if (remaining < cost) {
     return { ok: false, error: '이번 달 크레딧이 부족합니다 (잔여 ' + remaining + ' / 필요 ' + cost + ').', remaining, monthlyCredit };
   }
 
+  if (needsReset) await logCreditEvent(env, userId, '충전', '월 크레딧 리셋', monthlyCredit, monthlyCredit);
   remaining -= cost;
   const row = u.raw.slice();
   while (row.length < 9) row.push('');
   row[7] = remaining;
   row[8] = currentMonth;
   await updateRow(env, USERS_SHEET, u.rowNumber, row);
+  await logCreditEvent(env, userId, '사용', ACTION_LABELS[actionKey] || actionKey, -cost, remaining);
   return { ok: true, remaining, monthlyCredit };
+}
+
+// 사용 내역 조회(크레딧 페이지) — 본인 것만, 최신순.
+async function getCreditHistory(env, userId, n) {
+  const rows = await getValues(env, CREDIT_LOG_SHEET + '!A2:F');
+  const items = rows
+    .filter((r) => String(r[1] || '') === String(userId))
+    .reverse()
+    .slice(0, Math.min(n || 50, 100))
+    .map((r) => ({ date: r[0] || '', type: r[2] || '', item: r[3] || '', delta: r[4], remaining: r[5] }));
+  return { ok: true, items };
 }
 
 // 차감 없이 현재 잔여 크레딧만 조회(설정 화면 표시용) — lazy reset 여부만 계산해서 보여주고 시트는 안 건드림.
@@ -483,6 +511,7 @@ export default {
         if (data.action === 'schoolShareSearch') return jsonResponse(await schoolShareSearch(env, data.sidoCode || '', data.sggCode || '', data.schulKndCode || ''));
         if (data.action === 'useCredit') return jsonResponse(await useCredit(env, data.userId, data.actionKey || ''));
         if (data.action === 'creditStatus') return jsonResponse(await getCreditStatus(env, data.userId));
+        if (data.action === 'creditHistory') return jsonResponse(await getCreditHistory(env, data.userId, data.n || 50));
       }
 
       if (data.token !== env.SHARED_TOKEN) return jsonResponse({ error: 'Unauthorized' });
