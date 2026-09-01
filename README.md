@@ -1,9 +1,9 @@
-# MarketingTool
+# 마케팅딸깍 (marketingclick)
 
 올림피아드교육 내부 마케팅 도구.
 
-- 개발: `https://olymplan427-rgb.github.io/marketingtool/`
-- 베타: `https://olymplan427-rgb.github.io/marketingtool/beta/`
+- 개발: `https://olymplan427-rgb.github.io/marketingclick/`
+- 베타: `https://olymplan427-rgb.github.io/marketingclick/beta/`
 
 ## 기능
 
