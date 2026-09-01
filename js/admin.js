@@ -245,17 +245,17 @@ function adminRenderPosts() {
 }
 
 function adminTogglePostDetail(id) {
-  var el = document.getElementById('admin-post-detail');
-  if (!el) return;
-  if (adminState.selectedPostId === id) { adminState.selectedPostId = null; el.innerHTML = ''; return; }
-  adminState.selectedPostId = id;
   var post = adminState.posts.filter(function(p) { return p.id === id; })[0];
   if (!post) return;
-  el.innerHTML = '<div class="blog-card">'
-    + '<div style="font-size:12px;color:var(--mut);margin-bottom:6px;">' + adminEsc(post.userId) + ' · ' + adminEsc(post.date) + ' · ' + adminEsc(post.type) + '</div>'
-    + '<div style="font-size:14px;font-weight:800;color:var(--txt);margin-bottom:8px;">' + adminEsc(post.title) + '</div>'
-    + '<div style="font-size:13px;color:var(--txt);line-height:1.7;white-space:pre-wrap;max-height:400px;overflow-y:auto;">' + adminEsc(post.body) + '</div>'
-  + '</div>';
+  document.getElementById('admin-post-modal-title').textContent = post.userId + ' · ' + post.date + ' · ' + post.type;
+  document.getElementById('admin-post-modal-body').innerHTML =
+    '<div style="font-size:15px;font-weight:800;color:var(--txt);margin-bottom:10px;">' + adminEsc(post.title) + '</div>'
+    + '<div style="font-size:13px;color:var(--txt);line-height:1.7;white-space:pre-wrap;">' + adminEsc(post.body) + '</div>';
+  document.getElementById('admin-post-modal').style.display = 'flex';
+}
+
+function adminCloseModal() {
+  document.getElementById('admin-post-modal').style.display = 'none';
 }
 
 async function adminDeletePostRow(id) {
@@ -263,10 +263,7 @@ async function adminDeletePostRow(id) {
   try {
     await adminDeletePost(id);
     adminState.posts = adminState.posts.filter(function(p) { return p.id !== id; });
-    if (adminState.selectedPostId === id) {
-      adminState.selectedPostId = null;
-      document.getElementById('admin-post-detail').innerHTML = '';
-    }
+    adminCloseModal();
     adminRenderPosts();
     adminShowError('');
   } catch (e) {
