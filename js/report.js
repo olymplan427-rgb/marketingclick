@@ -4,32 +4,54 @@
 // ③ 콘텐츠 패턴 ④ 시사점 ⑤ 블로그 주제 추천 순으로 정리한다.
 // 숫자 집계는 할루시네이션 위험이 있는 AI에 맡기지 않고 원본 데이터에서 직접 계산한다.
 
-var REPORT_SYSTEM_TECHNICAL = [
+// 100개 게시글을 한 번의 AI 호출로 다 분석하면(응답까지 길게 요구) Vercel 릴레이의 실행시간 제한을
+// 넘겨 타임아웃(524)이 나는 문제가 실측으로 확인되어, 맵-리듀스로 나눔(2026-09-01):
+// ① MAP — REPORT_CHUNK_SIZE개씩 나눠 묶음별로 학원 프로필/패턴 후보만 가볍게 추출(호출 여러 번, 각각은 작아서 빠름)
+// ② REDUCE — 묶음별 후보들(원본 블로그 글이 아니라 이미 요약된 소량 데이터)을 모아 중복 병합 + 시사점/주제 추천까지 최종 정리
+// 데이터 100개·응답 분량·thinking 전부 원래대로 유지 — 품질 저하 없이 호출 하나당 처리량만 줄이는 방식.
+var REPORT_CHUNK_SIZE = 20;
+
+var REPORT_SYSTEM_MAP = [
   '너는 {{과목}} 학원({{학원명}}) 마케팅 담당자를 돕는 경쟁학원 분석가야.',
-  '특정 지역 수학학원 관련 네이버 블로그 검색 결과(JSON 목록)를 받는다. 각 항목엔 index가 붙어 있다.',
-  '목록 중 학원과 무관한 글(개인 잡담·후기성 글, 수학학원이 아닌 다른 과목 학원, 명백한 스팸)은 분석에서 제외하고,',
-  '실제 그 지역 수학학원들의 운영·마케팅 콘텐츠만 대상으로 아래 4가지를 정리해라.',
+  '특정 지역 수학학원 관련 네이버 블로그 검색 결과 중 한 묶음(전체의 일부, JSON 목록)을 받는다. 각 항목엔 index가 붙어 있다.',
+  '목록 중 학원과 무관한 글(개인 잡담·후기성 글, 수학학원이 아닌 다른 과목 학원, 명백한 스팸)은 제외하고,',
+  '실제 그 지역 수학학원들의 운영·마케팅 콘텐츠만 대상으로 아래를 정리해라.',
+  '이 묶음은 전체 데이터의 일부일 뿐이니, 여기 없다고 해서 다른 묶음에도 없다고 단정하지 마라.',
   '',
-  '1. brands: 반복적으로 등장하는 학원/브랜드별 프로필. 같은 학원의 여러 글을 종합해서 그 학원이',
+  '1. brands: 이 묶음에서 반복 등장하는 학원/브랜드별 프로필. 같은 학원의 여러 글을 종합해서 그 학원이',
   '   어떤 컨셉·톤·소재로 블로그를 운영하는지 2~3문장으로 요약해라(단순 글 목록 나열 금지, 종합 분석).',
   '   각 항목: name(학원명), summary(종합 요약), sourceIndexes(근거가 된 index 배열, 최대 5개)',
-  '2. patterns: 전체 데이터에서 공통으로 관찰되는 콘텐츠 포맷/전략 패턴 3~5개',
+  '2. patterns: 이 묶음에서 관찰되는 콘텐츠 포맷/전략 패턴 1~3개',
   '   (예: 학교별 시험 분석형, 학부모 후기형, 인접 지역 해시태그 확장 전략 등).',
   '   각 항목: label(패턴명), description(구체적 설명, 1~2문장)',
-  '3. insights: 위 분석을 바탕으로 우리 학원이 참고할 만한 전략적 시사점 2~4개(각 1~2문장, 문자열 배열)',
+  '',
+  '반드시 아래 JSON 형식으로만 응답 (다른 텍스트 금지):',
+  '{"brands":[{"name":"","summary":"","sourceIndexes":[0]}],"patterns":[{"label":"","description":""}]}'
+].join('\n');
+
+var REPORT_SYSTEM_REDUCE = [
+  '너는 {{과목}} 학원({{학원명}}) 마케팅 담당자를 돕는 경쟁학원 분석가야.',
+  '여러 묶음으로 나눠 1차 분석한 학원 프로필 후보 목록과 콘텐츠 패턴 후보 목록(JSON)을 받는다.',
+  '같은 학원이 여러 묶음에서 중복으로 등장할 수 있고, 비슷한 패턴도 표현만 다르게 여러 번 나올 수 있다.',
+  '이걸 바탕으로 아래 4가지 최종 리포트를 정리해라.',
+  '',
+  '1. brands: 후보들을 학원명 기준으로 병합·중복제거하고, 여러 묶음의 요약을 종합해 2~3문장으로 다시 작성해라.',
+  '   sourceIndexes도 합쳐서 최대 5개까지(중복 제거). 최대 8개 학원까지만.',
+  '2. patterns: 후보 패턴 중 유사한 것끼리 통합해서 공통 패턴 3~5개로 정리해라.',
+  '   각 항목: label(패턴명), description(구체적 설명, 1~2문장)',
+  '3. insights: 위 학원 프로필·패턴을 바탕으로 우리 학원이 참고할 만한 전략적 시사점 2~4개(각 1~2문장, 문자열 배열)',
   '4. topics: 위 분석을 바탕으로 우리 학원이 쓸 만한 블로그 주제 5~8개.',
   '   경쟁학원 사례를 참고하되 그대로 베끼지 말고 우리 학원 관점으로 재구성하고, 아직 안 다뤄진 소재를 우선하라.',
-  '   각 항목: title/blogType/keywords/reason/sourceIndexes(참고 index 배열, 0~3개)',
+  '   각 항목: title/blogType/keywords/reason/sourceIndexes(참고할 학원의 sourceIndexes 중에서 0~3개 골라 사용)',
   '   blogType은 다음 중 하나: 교육칼럼, 입시정보, 학원홍보, 합격인터뷰, 수학정보, 이벤트안내, 학원공지',
   '',
-  '응답 길이 제한이 있으니 brands는 최대 8개, patterns는 최대 5개까지만 — 전부 간결하게 작성해라.',
   '반드시 아래 JSON 형식으로만 응답 (다른 텍스트 금지):',
   '{"brands":[{"name":"","summary":"","sourceIndexes":[0]}],"patterns":[{"label":"","description":""}],"insights":[""],"topics":[{"title":"","blogType":"교육칼럼","keywords":"","reason":"","sourceIndexes":[0]}]}'
 ].join('\n');
 
-function buildReportSystem() {
+function reportFillPlaceholders(template) {
   var profile = loadAcademyProfile();
-  return REPORT_SYSTEM_TECHNICAL
+  return template
     .replace(/\{\{학원명\}\}/g, profile.name || '학원')
     .replace(/\{\{과목\}\}/g, profile.subject || '수학');
 }
@@ -116,26 +138,35 @@ async function reportGenerate(btn) {
 
     var trend = reportComputeMonthlyTrend(items);
 
-    btn.textContent = '⏳ AI가 정리 중...';
-    // 항목 수/응답 길이가 클수록 Gemini 처리 시간이 늘어나 Vercel 함수 시간제한(60초, Hobby플랜 상한)을
-    // 넘기는 524 타임아웃이 실측으로 확인되어 축소함(2026-09-01).
-    var itemsForAI = items.slice(0, 60).map(function(it, i) {
+    var itemsForAI = items.slice(0, 100).map(function(it, i) {
       return { index: i, title: it.title, description: it.description, bloggername: it.bloggername, postdate: it.postdate };
     });
+    var chunks = [];
+    for (var ci = 0; ci < itemsForAI.length; ci += REPORT_CHUNK_SIZE) chunks.push(itemsForAI.slice(ci, ci + REPORT_CHUNK_SIZE));
 
-    var raw = await geminiProxyCall({ model: getModel('gemini'), system: buildReportSystem(), content: JSON.stringify(itemsForAI), max_tokens: 5000 });
-    var parsed;
-    try {
-      parsed = blogParseJson(raw);
-    } catch (parseErr) {
-      // 응답이 max_tokens에 걸려 중간에 잘렸을 가능성 — 잘린 JSON 복구를 한 번 더 시도
-      parsed = (typeof blogRepairJson === 'function') ? blogRepairJson(raw) : null;
-      if (!parsed) throw new Error('JSON 파싱 실패 — 콘솔(F12)에서 원본 응답 확인. 앞부분: ' + String(raw).slice(0, 200));
+    var mapSystem = reportFillPlaceholders(REPORT_SYSTEM_MAP);
+    var partials = [];
+    for (var i = 0; i < chunks.length; i++) {
+      btn.textContent = '⏳ AI가 정리 중... (' + (i + 1) + '/' + chunks.length + ')';
+      var rawChunk = await geminiProxyCall({ model: getModel('gemini'), system: mapSystem, content: JSON.stringify(chunks[i]), max_tokens: 3000 });
+      var parsedChunk = reportParseJsonSafe(rawChunk);
+      if (parsedChunk) partials.push(parsedChunk);
     }
-    var brands = (parsed && parsed.brands) || [];
-    var patterns = (parsed && parsed.patterns) || [];
-    var insights = (parsed && parsed.insights) || [];
-    var topics = (parsed && parsed.topics) || [];
+    if (!partials.length) throw new Error('묶음별 1차 분석에 전부 실패했습니다 — 콘솔(F12)에서 원본 응답 확인.');
+
+    var reduceInput = {
+      brands: [].concat.apply([], partials.map(function(p) { return p.brands || []; })),
+      patterns: [].concat.apply([], partials.map(function(p) { return p.patterns || []; }))
+    };
+    btn.textContent = '⏳ 최종 정리 중...';
+    var rawFinal = await geminiProxyCall({ model: getModel('gemini'), system: reportFillPlaceholders(REPORT_SYSTEM_REDUCE), content: JSON.stringify(reduceInput), max_tokens: 8000 });
+    var parsed = reportParseJsonSafe(rawFinal);
+    if (!parsed) throw new Error('최종 정리 응답 JSON 파싱 실패 — 콘솔(F12)에서 원본 응답 확인. 앞부분: ' + String(rawFinal).slice(0, 200));
+
+    var brands = parsed.brands || [];
+    var patterns = parsed.patterns || [];
+    var insights = parsed.insights || [];
+    var topics = parsed.topics || [];
     if (!brands.length && !patterns.length && !topics.length) { alert('정리할 만한 내용을 찾지 못했습니다.'); return; }
 
     window._reportItems = items;
@@ -145,6 +176,15 @@ async function reportGenerate(btn) {
   } finally {
     btn.disabled = false;
     btn.textContent = orig;
+  }
+}
+
+function reportParseJsonSafe(raw) {
+  try {
+    return blogParseJson(raw);
+  } catch (parseErr) {
+    // 응답이 max_tokens에 걸려 중간에 잘렸을 가능성 — 잘린 JSON 복구를 한 번 더 시도
+    return (typeof blogRepairJson === 'function') ? blogRepairJson(raw) : null;
   }
 }
 
