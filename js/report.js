@@ -146,22 +146,42 @@ async function reportGenerate(btn) {
 
     var mapSystem = reportFillPlaceholders(REPORT_SYSTEM_MAP);
     var partials = [];
+    var failedChunks = 0;
     for (var i = 0; i < chunks.length; i++) {
       btn.textContent = '⏳ AI가 정리 중... (' + (i + 1) + '/' + chunks.length + ')';
-      var rawChunk = await geminiProxyCall({ model: getModel('gemini'), system: mapSystem, content: JSON.stringify(chunks[i]), max_tokens: 3000 });
-      var parsedChunk = reportParseJsonSafe(rawChunk);
+      // 묶음 하나가 일시적으로 느려지거나(Gemini 쪽 드문 지연) 실패해도 전체 리포트를 중단시키지
+      // 않도록, 한 번 재시도 후에도 안 되면 그 묶음만 건너뛴다(2026-09-01, 실측: 20개 묶음 4개는
+      // 16~18초로 정상이었는데 나머지 하나가 50초 넘게 지연되어 전체가 죽는 문제 확인).
+      var parsedChunk = null;
+      for (var attempt = 0; attempt < 2 && !parsedChunk; attempt++) {
+        try {
+          var rawChunk = await geminiProxyCall({ model: getModel('gemini'), system: mapSystem, content: JSON.stringify(chunks[i]), max_tokens: 3000 });
+          parsedChunk = reportParseJsonSafe(rawChunk);
+        } catch (chunkErr) {
+          console.warn('리포트 묶음 ' + (i + 1) + ' 분석 실패(시도 ' + (attempt + 1) + '):', chunkErr.message);
+        }
+      }
       if (parsedChunk) partials.push(parsedChunk);
+      else failedChunks++;
     }
     if (!partials.length) throw new Error('묶음별 1차 분석에 전부 실패했습니다 — 콘솔(F12)에서 원본 응답 확인.');
+    if (failedChunks) showToast(failedChunks + '개 묶음은 응답 지연으로 제외하고 나머지로 리포트를 만듭니다');
 
     var reduceInput = {
       brands: [].concat.apply([], partials.map(function(p) { return p.brands || []; })),
       patterns: [].concat.apply([], partials.map(function(p) { return p.patterns || []; }))
     };
     btn.textContent = '⏳ 최종 정리 중...';
-    var rawFinal = await geminiProxyCall({ model: getModel('gemini'), system: reportFillPlaceholders(REPORT_SYSTEM_REDUCE), content: JSON.stringify(reduceInput), max_tokens: 8000 });
-    var parsed = reportParseJsonSafe(rawFinal);
-    if (!parsed) throw new Error('최종 정리 응답 JSON 파싱 실패 — 콘솔(F12)에서 원본 응답 확인. 앞부분: ' + String(rawFinal).slice(0, 200));
+    var reduceSystem = reportFillPlaceholders(REPORT_SYSTEM_REDUCE);
+    var parsed = null, reduceErr = null;
+    for (var rAttempt = 0; rAttempt < 2 && !parsed; rAttempt++) {
+      try {
+        var rawFinal = await geminiProxyCall({ model: getModel('gemini'), system: reduceSystem, content: JSON.stringify(reduceInput), max_tokens: 8000 });
+        parsed = reportParseJsonSafe(rawFinal);
+        if (!parsed) reduceErr = '최종 정리 응답 JSON 파싱 실패 — 콘솔(F12)에서 원본 응답 확인. 앞부분: ' + String(rawFinal).slice(0, 200);
+      } catch (e) { reduceErr = e.message; }
+    }
+    if (!parsed) throw new Error(reduceErr || '최종 정리에 실패했습니다.');
 
     var brands = parsed.brands || [];
     var patterns = parsed.patterns || [];
