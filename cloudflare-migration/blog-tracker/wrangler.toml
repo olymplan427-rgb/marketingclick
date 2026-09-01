@@ -1,3 +1,9 @@
 name = "mtt-blog-tracker"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
+
+# 2026-09-01: Google Sheets → D1 전환 (매 요청마다 걸리던 OAuth 재인증 + Sheets API 왕복 제거)
+[[d1_databases]]
+binding = "DB"
+database_name = "mtt-blog-tracker"
+database_id = "04526f07-b04e-4eaa-8fd5-63e11cb3a1d6"
