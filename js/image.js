@@ -2007,9 +2007,9 @@ p2render();
 
 // ── 인스타그램 게시 ──────────────────────────────────────────────────
 
-var IG_GITHUB_OWNER = 'Olympiadedu';
-var IG_GITHUB_REPO  = 'MarketingTool';
-var IG_GITHUB_BRANCH = 'main';
+var IG_GITHUB_OWNER = 'olymplan427-rgb';
+var IG_GITHUB_REPO  = 'marketingclick';
+var IG_GITHUB_BRANCH = 'ig-assets';
 
 function igGetCreds() {
   return {
