@@ -111,12 +111,18 @@ export async function getSheetRowCount(env, sheetName) {
 
 // 시트 탭이 아직 없으면(신규 기능이라 아무도 만든 적 없는 경우 등) 자동으로 만든다 —
 // getValues/appendRow가 존재하지 않는 탭에 대해 그냥 실패하는 문제를 근본적으로 없앰.
+// 한 번 존재를 확인한 시트는 이 Worker 인스턴스가 살아있는 동안 다시 확인하지 않음 — 크레딧 로그처럼
+// 매 AI 호출마다 불리는 경로에서 이미 있는 게 뻔한 탭을 매번 스프레드시트 메타데이터까지 조회하며
+// 재확인하던 낭비를 없앰(getAccessToken의 cachedToken과 동일한 인스턴스-수명 캐시 패턴).
+const ensuredSheets = new Set();
 export async function ensureSheetExists(env, sheetName) {
+  if (ensuredSheets.has(sheetName)) return;
   const rowCount = await getSheetRowCount(env, sheetName);
-  if (rowCount > 0) return; // 이미 존재
+  if (rowCount > 0) { ensuredSheets.add(sheetName); return; }
   await sheetsFetch(env, ':batchUpdate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ requests: [{ addSheet: { properties: { title: sheetName } } }] })
   });
+  ensuredSheets.add(sheetName);
 }
