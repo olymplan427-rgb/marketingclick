@@ -1,7 +1,7 @@
 // 관리자 페이지 — AI 프로바이더 키/모델, 기능별 크레딧 비용, 사용자 관리(D1 직접 반영).
 // 서버(blog-tracker Worker)가 role==='관리자' 아니면 모든 admin* 액션을 거부하므로,
 // 여기서는 sidebar 노출 + 편의 UI만 담당(applyAdminVisibility는 js/common.js).
-var adminState = { config: null, users: [] };
+var adminState = { config: null, users: [], notices: [] };
 
 function adminEsc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -18,14 +18,60 @@ function adminShowError(msg) {
 async function adminInit() {
   adminShowError('');
   try {
-    var [config, users] = await Promise.all([adminGetConfig(), adminListUsers()]);
+    var [config, users, notices] = await Promise.all([adminGetConfig(), adminListUsers(), getAnnouncements()]);
     adminState.config = config;
     adminState.users = users;
+    adminState.notices = notices;
     adminRenderAiList();
     adminRenderCreditCosts();
     adminRenderUsers();
+    adminRenderNotices();
+    var dateEl = document.getElementById('admin-notice-date');
+    if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
   } catch (e) {
     adminShowError(e.message || '관리자 정보를 불러오지 못했습니다.');
+  }
+}
+
+// ── 공지사항 ────────────────────────────────────────────────────
+function adminRenderNotices() {
+  var el = document.getElementById('admin-notice-list');
+  if (!el) return;
+  if (!adminState.notices.length) { el.innerHTML = '<div style="font-size:12px;color:var(--mut);">등록된 공지가 없습니다.</div>'; return; }
+  el.innerHTML = adminState.notices.map(function(n) {
+    return '<div class="blog-card" style="display:flex;justify-content:space-between;gap:12px;align-items:start;">'
+      + '<div><div style="font-size:11px;color:var(--mut);">' + adminEsc(n.date) + '</div>'
+        + '<div style="font-size:13px;font-weight:700;color:var(--txt);margin-top:2px;">' + adminEsc(n.title) + '</div>'
+        + '<div style="font-size:12px;color:var(--mut);margin-top:2px;">' + adminEsc(n.body) + '</div></div>'
+      + '<button class="btn" onclick="adminDeleteNotice(' + n.id + ')" style="flex-shrink:0;">삭제</button>'
+    + '</div>';
+  }).join('');
+}
+
+async function adminAddNotice() {
+  var dateEl = document.getElementById('admin-notice-date');
+  var titleEl = document.getElementById('admin-notice-title');
+  var bodyEl = document.getElementById('admin-notice-body');
+  var title = titleEl ? titleEl.value.trim() : '';
+  if (!title) { adminShowError('공지 제목을 입력하세요.'); return; }
+  try {
+    await adminAddAnnouncement(dateEl.value || '', title, bodyEl.value.trim());
+    titleEl.value = ''; bodyEl.value = '';
+    adminShowError('');
+    adminState.notices = await getAnnouncements();
+    adminRenderNotices();
+  } catch (e) {
+    adminShowError(e.message || '등록 실패');
+  }
+}
+
+async function adminDeleteNotice(id) {
+  try {
+    await adminDeleteAnnouncement(id);
+    adminState.notices = await getAnnouncements();
+    adminRenderNotices();
+  } catch (e) {
+    adminShowError(e.message || '삭제 실패');
   }
 }
 

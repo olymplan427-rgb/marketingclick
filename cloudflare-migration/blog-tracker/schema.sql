@@ -76,3 +76,11 @@ CREATE TABLE IF NOT EXISTS config_credit_costs (
   action_key TEXT PRIMARY KEY,
   cost INTEGER
 );
+
+CREATE TABLE IF NOT EXISTS announcements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  date TEXT,
+  title TEXT,
+  body TEXT,
+  created_at TEXT
+);
