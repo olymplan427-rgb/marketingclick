@@ -65,8 +65,8 @@ async function creditUpdateBadge() {
   if (!badge || typeof getUserAuth !== 'function' || !getUserAuth()) return;
   try {
     var status = await getCreditStatus();
-    if (!status || status.unlimited) { badge.style.display = 'none'; return; }
-    badge.textContent = status.remaining;
+    if (!status) { badge.style.display = 'none'; return; }
+    badge.textContent = status.unlimited ? '무제한' : status.remaining;
     badge.style.display = '';
   } catch (e) { badge.style.display = 'none'; }
 }
