@@ -10,13 +10,13 @@ const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedb
 // 액션키별 기본 크레딧 소모량 — config 시트 G/H열("액션키"/"크레딧비용")에 값이 있으면 그쪽이 우선(코드
 // 재배포 없이 관리자가 조정 가능, 기존 모델 카탈로그 표와 동일한 패턴). 시트에 없을 때만 이 기본값 사용.
 const CREDIT_COST_DEFAULTS = {
-  blog_generate: 3, blog_analyze: 1, blog_finalize: 3, image_promo: 1, mapsearch_search: 1,
+  blog_generate: 3, blog_analyze: 1, blog_finalize: 3, image_promo: 1,
   mapsearch_nearby: 1, news_search: 1, report_generate: 5
 };
 // 크레딧 사용 내역(credit_log 시트)에 표시할 한글 이름 — config 시트에 관리자가 적어둔 이름과 통일.
 const ACTION_LABELS = {
   blog_generate: '블로그 초안 생성', blog_analyze: 'AI자율분석', blog_finalize: '블로그 최종안 생성',
-  image_promo: '이미지 홍보문구 생성', mapsearch_search: '지도검색 블로그 취합',
+  image_promo: '이미지 홍보문구 생성',
   mapsearch_nearby: '주변 학원 검색', news_search: '기사검색 주제 추천', report_generate: '지역 트렌드 리포트 생성'
 };
 const CREDIT_LOG_SHEET = 'credit_log';
