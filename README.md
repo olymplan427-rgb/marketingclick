@@ -19,9 +19,9 @@
 ## 구조
 
 ```
-index.html         # 진입점 (사이드바 + 로그인)
-css/main.css        # 스타일
-js/                  # 기능별 스크립트 (blog, image, mapsearch, monitor, news, common)
-pages/               # 각 화면 HTML
-gas/                 # 백엔드(Google Apps Script) — 로그인/블로그저장/지도검색/뉴스검색
+index.html            # 진입점 (사이드바 + 로그인)
+css/main.css           # 스타일
+js/                     # 기능별 스크립트 (blog, image, mapsearch, monitor, news, common)
+pages/                  # 각 화면 HTML
+cloudflare-migration/   # 백엔드(Cloudflare Workers) — 로그인/블로그저장/지도검색/뉴스검색
 ```
