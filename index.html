@@ -76,43 +76,44 @@
 </div>
 
 <!-- 로그인 게이트 — 로그인 전에는 전체를 가림 (js/common.js의 initLoginGate가 로그인 여부에 따라 표시/숨김) -->
-<div id="login-overlay" style="display:flex;position:fixed;inset:0;z-index:3000;">
-  <div class="login-brand-panel">
-    <div class="login-brand-name">마케팅딸깍</div>
-    <div class="login-brand-headline">클릭 한 번으로<br>학원 마케팅 준비 끝</div>
-    <div class="login-brand-sub">블로그 작성, 지역 트렌드 리포트 확인, 이미지 제작까지<br>마케팅딸깍에서 가장 빠르게 끝내보세요.</div>
-    <div class="login-brand-feature"><span class="login-brand-feature-icon">✎</span>AI 블로그 작성 · 소재 추천</div>
-    <div class="login-brand-feature"><span class="login-brand-feature-icon">◎</span>주변 학원 검색 · 지역 트렌드 리포트</div>
-    <div class="login-brand-feature"><span class="login-brand-feature-icon">▤</span>성적우수 이미지 제작</div>
-  </div>
-  <div class="login-form-panel">
-    <div style="width:320px;max-width:90vw;">
-      <div style="background:var(--sur);border:1px solid var(--bdr);border-radius:12px;padding:32px;">
-        <div id="login-title" style="font-weight:900;font-size:18px;margin-bottom:4px;">마케팅딸깍 로그인</div>
-        <div id="login-subtitle" style="color:var(--mut);font-size:13px;margin-bottom:20px;">원하는 아이디/비밀번호로 로그인하세요</div>
-        <div id="login-register-fields" style="display:none;">
+<div id="login-overlay" style="display:flex;align-items:center;justify-content:center;position:fixed;inset:0;z-index:3000;background:var(--bg);">
+  <div style="width:380px;max-width:90vw;">
+    <div class="login-promo-banner"><span class="login-promo-icon">🎁</span>첫 로그인 시 <b>100 크레딧</b>을 무료로 드려요</div>
+    <div class="login-card">
+      <div id="login-title" style="font-weight:800;font-size:20px;text-align:center;">마케팅딸깍 로그인</div>
+      <div id="login-subtitle" style="color:var(--mut);font-size:13px;text-align:center;margin-bottom:22px;">클릭 한 번으로 학원 마케팅을 준비하세요</div>
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div id="login-register-fields" style="display:none;flex-direction:column;gap:14px;">
           <div class="set-field">
+            <label class="set-label">이름</label>
             <input id="login-reg-name" type="text" placeholder="이름" class="set-input" autocomplete="name" onkeydown="if(event.key==='Enter')registerSubmit()" />
           </div>
-          <div class="set-field" style="margin-top:8px;">
+          <div class="set-field">
+            <label class="set-label">학원명</label>
             <input id="login-reg-academy" type="text" placeholder="학원명" class="set-input" autocomplete="organization" onkeydown="if(event.key==='Enter')registerSubmit()" />
           </div>
         </div>
         <div class="set-field">
+          <label class="set-label">아이디</label>
           <input id="login-id" type="text" placeholder="아이디" class="set-input" autocomplete="username" onkeydown="if(event.key==='Enter')loginOverlaySubmit()" />
         </div>
-        <div class="set-field" style="margin-top:8px;">
+        <div class="set-field">
+          <label class="set-label">비밀번호</label>
           <input id="login-pw" type="password" placeholder="비밀번호" class="set-input" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginOverlaySubmit()" />
         </div>
-        <div id="login-reg-pw-confirm-field" class="set-field" style="display:none;margin-top:8px;">
+        <div id="login-reg-pw-confirm-field" class="set-field" style="display:none;">
+          <label class="set-label">비밀번호 확인</label>
           <input id="login-reg-pw-confirm" type="password" placeholder="비밀번호 확인" class="set-input" autocomplete="new-password" onkeydown="if(event.key==='Enter')registerSubmit()" />
         </div>
-        <div id="login-error" style="display:none;color:#ef4444;font-size:12px;margin-top:8px;"></div>
-        <button id="login-submit" class="btn btn-primary" style="width:100%;margin-top:16px;" onclick="loginOverlaySubmit()">로그인</button>
-        <div style="text-align:center;margin-top:14px;font-size:12px;color:var(--mut);">
-          <span id="login-toggle-to-register">계정이 없으신가요? <a href="javascript:void(0)" onclick="setLoginOverlayMode('register')" style="color:var(--acc);font-weight:700;">회원가입</a></span>
-          <span id="login-toggle-to-login" style="display:none;">이미 계정이 있으신가요? <a href="javascript:void(0)" onclick="setLoginOverlayMode('login')" style="color:var(--acc);font-weight:700;">로그인</a></span>
-        </div>
+      </div>
+      <label id="login-remember-row" style="display:flex;align-items:center;gap:7px;margin-top:16px;font-size:13px;color:var(--txt);cursor:pointer;">
+        <input type="checkbox" id="login-remember" style="width:16px;height:16px;" />로그인 상태 유지
+      </label>
+      <div id="login-error" style="display:none;color:#ef4444;font-size:12px;margin-top:8px;"></div>
+      <button id="login-submit" class="btn btn-primary" style="width:100%;margin-top:16px;" onclick="loginOverlaySubmit()">로그인</button>
+      <div style="text-align:center;margin-top:14px;font-size:12px;color:var(--mut);">
+        <span id="login-toggle-to-register">계정이 없으신가요? <a href="javascript:void(0)" onclick="setLoginOverlayMode('register')" style="color:var(--acc);font-weight:700;">회원가입</a></span>
+        <span id="login-toggle-to-login" style="display:none;">이미 계정이 있으신가요? <a href="javascript:void(0)" onclick="setLoginOverlayMode('login')" style="color:var(--acc);font-weight:700;">로그인</a></span>
       </div>
     </div>
   </div>
