@@ -1,8 +1,8 @@
 // 구글시트(sheets.js) → D1(SQLite) 전환 (2026-09-01) — 매 요청마다 걸리던 Google OAuth 재인증 +
 // Sheets API 왕복이 없어지고, Worker 내부에서 로컬 SQLite 쿼리로 끝나 응답 속도가 크게 개선됨.
 // 클라이언트(js/common.js)는 전혀 수정 불필요 — 액션/응답 형태 100% 동일하게 유지.
-const ADMIN_ACTIONS = ['adminListUsers', 'adminUpdateUser', 'adminGetConfig', 'adminSetConfigValue', 'adminSetModels', 'adminSetCreditCost'];
-const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus', 'creditHistory', 'creditQuote', ...ADMIN_ACTIONS];
+const ADMIN_ACTIONS = ['adminListUsers', 'adminUpdateUser', 'adminGetConfig', 'adminSetConfigValue', 'adminSetModels', 'adminSetCreditCost', 'adminAddAnnouncement', 'adminUpdateAnnouncement', 'adminDeleteAnnouncement'];
+const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus', 'creditHistory', 'creditQuote', 'getAnnouncements', ...ADMIN_ACTIONS];
 
 // 액션키별 기본 크레딧 소모량 — config_credit_costs 테이블에 값이 있으면 그쪽이 우선(코드 재배포
 // 없이 D1 값만 바꿔 조정 가능, 기존 구글시트 config 표와 동일한 우선순위 패턴). 없을 때만 기본값 사용.
@@ -446,6 +446,32 @@ async function adminSetCreditCost(env, actionKey, cost) {
   return { ok: true };
 }
 
+// ── 공지사항 (홈 페이지) ──────────────────────────────────────────
+async function getAnnouncements(env) {
+  const { results } = await env.DB.prepare('SELECT id, date, title, body FROM announcements ORDER BY id DESC LIMIT 20').all();
+  return { ok: true, items: results };
+}
+
+async function adminAddAnnouncement(env, date, title, body) {
+  if (!title) return { ok: false, error: '제목이 필요합니다.' };
+  await env.DB.prepare('INSERT INTO announcements (date,title,body,created_at) VALUES (?,?,?,?)')
+    .bind(date || todayKST(), title, body || '', nowKST()).run();
+  return { ok: true };
+}
+
+async function adminUpdateAnnouncement(env, id, date, title, body) {
+  if (!id) return { ok: false, error: 'id가 필요합니다.' };
+  await env.DB.prepare('UPDATE announcements SET date=?, title=?, body=? WHERE id=?')
+    .bind(date || todayKST(), title || '', body || '', id).run();
+  return { ok: true };
+}
+
+async function adminDeleteAnnouncement(env, id) {
+  if (!id) return { ok: false, error: 'id가 필요합니다.' };
+  await env.DB.prepare('DELETE FROM announcements WHERE id=?').bind(id).run();
+  return { ok: true };
+}
+
 // ── 네이버 블로그 본문 수집 (참고 URL 기능용) ──────────────────────
 function normalizeNaverMobileUrl(url) {
   const raw = (url || '').trim();
@@ -538,6 +564,10 @@ export default {
           return jsonResponse({ ok: false, error: '관리자만 접근할 수 있습니다.' });
         }
         if (data.action === 'login') return jsonResponse({ ok: true, name: v.name, academy: v.academy, role: v.role || '' });
+        if (data.action === 'getAnnouncements') return jsonResponse(await getAnnouncements(env));
+        if (data.action === 'adminAddAnnouncement') return jsonResponse(await adminAddAnnouncement(env, data.date || '', data.title || '', data.body || ''));
+        if (data.action === 'adminUpdateAnnouncement') return jsonResponse(await adminUpdateAnnouncement(env, data.targetId || '', data.date || '', data.title || '', data.body || ''));
+        if (data.action === 'adminDeleteAnnouncement') return jsonResponse(await adminDeleteAnnouncement(env, data.targetId || ''));
         if (data.action === 'adminListUsers') return jsonResponse(await adminListUsers(env));
         if (data.action === 'adminUpdateUser') return jsonResponse(await adminUpdateUser(env, data.targetId || '', data.patch || {}));
         if (data.action === 'adminGetConfig') return jsonResponse(await adminGetConfig(env));

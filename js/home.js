@@ -1,12 +1,6 @@
 // 홈 페이지 — 공지사항 + 크레딧 요약 + 기능 바로가기 + 최근 작성 글.
 // 로그인 직후(hideLoginOverlay) 자동 실행되며, 이전에 있던 "베타 시작 안내" 팝업을 대체한다.
-
-// 공지사항 — 날짜 최신순으로 위에 추가. 관리자가 코드에서 직접 편집(별도 관리 화면 없음).
-var HOME_ANNOUNCEMENTS = [
-  { date: '2026-09-01', title: '마케팅딸깍 베타를 시작합니다', desc: '원장님의 사용 경험과 피드백을 바탕으로 계속 개선해 나갑니다. 불편한 점이나 아이디어는 사이드바의 "피드백"/"문의하기"로 언제든 남겨주세요.' },
-  { date: '2026-09-01', title: '신규 가입 시 500 크레딧 지급', desc: '블로그 작성, 이미지 제작 등 기능별로 크레딧이 소모됩니다. 잔여량과 사용 내역은 사이드바 "크레딧"에서 확인할 수 있어요.' },
-  { date: '2026-09-01', title: '일부 기능은 베타 기간 중 순차 공개됩니다', desc: '경쟁학원 모니터링, 학교 점유율 등은 안정화 후 순서대로 열릴 예정입니다.' }
-];
+// 공지사항은 D1(announcements 테이블)에서 서버로 관리 — 관리자 페이지에서 작성/삭제(js/admin.js).
 
 function homeEsc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -35,15 +29,21 @@ async function homeInit() {
   homeRenderRecentPosts();
 }
 
-function homeRenderNotices() {
+async function homeRenderNotices() {
   var el = document.getElementById('home-notice-list');
   if (!el) return;
-  el.innerHTML = HOME_ANNOUNCEMENTS.map(function(n) {
-    return '<div class="home-notice-card">'
-      + '<div class="home-notice-date">' + homeEsc(n.date) + '</div>'
-      + '<div><div class="home-notice-title">' + homeEsc(n.title) + '</div><div class="home-notice-desc">' + homeEsc(n.desc) + '</div></div>'
-    + '</div>';
-  }).join('');
+  try {
+    var items = await getAnnouncements();
+    if (!items.length) { el.innerHTML = '<div style="font-size:12px;color:var(--mut);">등록된 공지가 없습니다.</div>'; return; }
+    el.innerHTML = items.map(function(n) {
+      return '<div class="home-notice-card">'
+        + '<div class="home-notice-date">' + homeEsc(n.date) + '</div>'
+        + '<div><div class="home-notice-title">' + homeEsc(n.title) + '</div><div class="home-notice-desc">' + homeEsc(n.body) + '</div></div>'
+      + '</div>';
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--mut);">공지를 불러오지 못했습니다.</div>';
+  }
 }
 
 function homeRenderFeatures() {

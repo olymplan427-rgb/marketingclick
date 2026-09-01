@@ -11,6 +11,17 @@
 
     <div class="credit-content">
       <div class="tool-section">
+        <div class="sec-title">공지사항 (홈 화면에 표시)</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+          <input class="blog-input" type="date" id="admin-notice-date" style="width:160px;">
+          <input class="blog-input" id="admin-notice-title" placeholder="제목" style="flex:1;min-width:200px;">
+          <button class="btn btn-primary" onclick="adminAddNotice()">공지 등록</button>
+        </div>
+        <textarea class="blog-input" id="admin-notice-body" rows="2" placeholder="내용" style="width:100%;margin-bottom:14px;"></textarea>
+        <div id="admin-notice-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+
+      <div class="tool-section">
         <div class="sec-title">AI 프로바이더 설정</div>
         <div id="admin-ai-list" style="display:flex;flex-direction:column;gap:12px;"></div>
       </div>

@@ -625,6 +625,31 @@ async function adminSetCreditCost(actionKey, cost) {
   return _adminCall('adminSetCreditCost', { actionKey: actionKey, cost: cost });
 }
 
+// ── 공지사항 (홈 페이지) ────────────────────────────────────────
+async function getAnnouncements() {
+  var auth = getUserAuth();
+  if (!auth) return [];
+  var cfg = getGasConfig();
+  if (!cfg.url || !cfg.token) return [];
+  try {
+    var json = await _fetchGasJson(cfg.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'getAnnouncements', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId() })
+    });
+    return json.ok ? (json.items || []) : [];
+  } catch (e) { return []; }
+}
+async function adminAddAnnouncement(date, title, body) {
+  return _adminCall('adminAddAnnouncement', { date: date, title: title, body: body });
+}
+async function adminUpdateAnnouncement(targetId, date, title, body) {
+  return _adminCall('adminUpdateAnnouncement', { targetId: targetId, date: date, title: title, body: body });
+}
+async function adminDeleteAnnouncement(targetId) {
+  return _adminCall('adminDeleteAnnouncement', { targetId: targetId });
+}
+
 // ── 기능별 on/off (flags.js가 배포 시 window.FEATURE_FLAGS 일부를 덮어씀) ──
 function applyFeatureFlags() {
   var f = window.FEATURE_FLAGS || {};
