@@ -40,14 +40,12 @@
         <button class="btn btn-primary" style="width:100%;" onclick="msSearch()">🔍 인근 학원 검색</button>
       </div>
 
-      <div class="canvas-right" style="overflow-y:auto;align-items:stretch;justify-content:flex-start;">
-        <div class="canvas-header">
-          <div class="canvas-header-left">
-            <div class="canvas-title">인근 학원 리스트</div>
-            <div class="canvas-desc" id="ms-result-count">왼쪽에서 위치와 반경을 설정한 뒤 검색해보세요</div>
-          </div>
+      <div class="blog-right">
+        <div class="blog-card">
+          <div style="font-size:14px;font-weight:800;color:var(--txt);">인근 학원 리스트</div>
+          <div style="font-size:12px;color:var(--mut);margin-top:4px;" id="ms-result-count">왼쪽에서 위치와 반경을 설정한 뒤 검색해보세요</div>
         </div>
-        <div style="padding:20px 24px;display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start;" id="ms-result-list">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start;" id="ms-result-list">
           <div class="empty-state" style="grid-column:1/-1;">
             <div class="empty-state-title">검색 결과가 여기에 표시됩니다</div>
             <div class="empty-state-desc">왼쪽에서 위치와 반경을 설정한 뒤 검색해보세요</div>

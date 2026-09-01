@@ -162,9 +162,9 @@ function reportRender(region, trend, brands, patterns, insights, topics) {
     return '<tr><td style="padding:6px 10px;border-bottom:1px solid var(--bdr);font-weight:600;">' + reportEsc(t.month) + (t.partial ? ' (오늘까지)' : '') + '</td>' +
       '<td style="padding:6px 10px;border-bottom:1px solid var(--bdr);text-align:right;font-weight:800;">' + t.count + '건</td></tr>';
   }).join('');
-  var trendSection = trend.length
-    ? '<table style="width:100%;font-size:14px;color:var(--txt);border-collapse:collapse;margin-bottom:8px;">' + trendRows + '</table>'
-    : '<p style="font-size:14px;color:var(--txt);">집계할 게시글이 없습니다.</p>';
+  var trendSection = '<div class="blog-card">' + (trend.length
+    ? '<table style="width:100%;font-size:14px;color:var(--txt);border-collapse:collapse;">' + trendRows + '</table>'
+    : '<p style="font-size:14px;color:var(--txt);">집계할 게시글이 없습니다.</p>') + '</div>';
 
   var brandCards = brands.map(function(b) {
     return '' +
@@ -182,11 +182,11 @@ function reportRender(region, trend, brands, patterns, insights, topics) {
       '</div>';
   }).join('');
 
-  var insightList = insights.length
+  var insightList = '<div class="blog-card">' + (insights.length
     ? '<ul style="margin:0;padding-left:20px;font-size:14px;color:var(--txt);line-height:1.9;">' +
         insights.map(function(i) { return '<li>' + reportEsc(i) + '</li>'; }).join('') +
       '</ul>'
-    : '';
+    : '<p style="font-size:14px;color:var(--txt);">-</p>') + '</div>';
 
   var topicCards = topics.map(function(t, i) {
     return [
