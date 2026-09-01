@@ -77,7 +77,6 @@ function showPage(id) {
     if (id === 'blog') {
       initAcademyProfile();
       blogGoStep(blogState.step || 1);
-      if (typeof blogUpdateQuotaStatus === 'function') blogUpdateQuotaStatus();
     } else if (id === 'blog-history') {
       blogHistoryInit();
     }
@@ -431,10 +430,77 @@ async function useCredit(actionKey) {
   });
   if (!json.ok) throw new Error(json.error || '크레딧 사용에 실패했습니다.');
   if (typeof creditUpdateBadge === 'function') creditUpdateBadge();
-  if (!json.unlimited && typeof showToast === 'function') {
-    showToast('크레딧 ' + json.cost + '개 사용 (잔여 ' + json.remaining + '개)');
-  }
   return json;
+}
+
+// 실제 차감 없이 비용만 미리 조회(사용 확인 팝업용).
+async function getCreditQuote(actionKey) {
+  var auth = getUserAuth();
+  if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
+  var cfg = getGasConfig();
+  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  var json = await _fetchGasJson(cfg.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'creditQuote', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), actionKey: actionKey })
+  });
+  if (!json.ok) throw new Error(json.error || '크레딧 확인에 실패했습니다.');
+  return json;
+}
+
+// 크레딧이 드는 액션을 실행하기 전에 "예상 크레딧 사용 안내" 팝업(#credit-confirm-overlay)을
+// 띄우고, 사용자가 "계속"을 눌러야 실제 useCredit()(차감)까지 진행한다. 무제한 계정은 확인
+// 없이 바로 진행(어차피 차감되지 않음). 취소 시 던지는 Error에 cancelled=true를 표시해두면
+// 호출부 catch에서 "실패"가 아니라 "사용자 취소"임을 구분해 별도 오류 메시지를 띄우지 않을 수 있다.
+var _creditConfirmResolve = null;
+function useCreditConfirm(actionKey, label) {
+  return new Promise(function(resolve, reject) {
+    (async function() {
+      var quote;
+      try {
+        quote = await getCreditQuote(actionKey);
+      } catch (e) { reject(e); return; }
+
+      if (quote.unlimited) {
+        try { resolve(await useCredit(actionKey)); } catch (e) { reject(e); }
+        return;
+      }
+
+      var overlay = document.getElementById('credit-confirm-overlay');
+      if (!overlay) { // 팝업 DOM이 없으면 안전하게 그냥 진행
+        try { resolve(await useCredit(actionKey)); } catch (e) { reject(e); }
+        return;
+      }
+
+      var descEl = document.getElementById('credit-confirm-desc');
+      var labelEl = document.getElementById('credit-confirm-label');
+      var costEl = document.getElementById('credit-confirm-cost');
+      var balEl = document.getElementById('credit-confirm-balance');
+      if (descEl) descEl.textContent = label + ' 시 크레딧이 차감됩니다.';
+      if (labelEl) labelEl.textContent = label;
+      if (costEl) costEl.textContent = '예상 ' + quote.cost + '크레딧';
+      if (balEl) balEl.textContent = '남은 크레딧 ' + quote.remaining + '개 · 차감 후 ' + Math.max(0, quote.remaining - quote.cost) + '개';
+      overlay.style.display = 'flex';
+
+      _creditConfirmResolve = function(proceed) {
+        overlay.style.display = 'none';
+        _creditConfirmResolve = null;
+        if (!proceed) {
+          var cancelErr = new Error('취소되었습니다.');
+          cancelErr.cancelled = true;
+          reject(cancelErr);
+          return;
+        }
+        useCredit(actionKey).then(resolve, reject);
+      };
+    })();
+  });
+}
+function creditConfirmProceed() {
+  if (_creditConfirmResolve) _creditConfirmResolve(true);
+}
+function creditConfirmCancel() {
+  if (_creditConfirmResolve) _creditConfirmResolve(false);
 }
 
 // 설정(계정) 화면 표시용 — 차감 없이 잔여 크레딧만 조회.

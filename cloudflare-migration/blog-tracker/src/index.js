@@ -5,7 +5,7 @@ import { getValues, appendRow, updateRow, getSheetRowCount, ensureSheetExists } 
 const USERS_SHEET = 'users';
 const BLOG_SHEET = 'blog_posts';
 const FEEDBACK_SHEET = 'feedback';
-const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus', 'creditHistory'];
+const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus', 'creditHistory', 'creditQuote'];
 
 // 액션키별 기본 크레딧 소모량 — config 시트 G/H열("액션키"/"크레딧비용")에 값이 있으면 그쪽이 우선(코드
 // 재배포 없이 관리자가 조정 가능, 기존 모델 카탈로그 표와 동일한 패턴). 시트에 없을 때만 이 기본값 사용.
@@ -180,6 +180,21 @@ async function getCreditHistory(env, userId, n) {
     .slice(0, Math.min(n || 50, 100))
     .map((r) => ({ date: r[0] || '', type: r[2] || '', item: r[3] || '', delta: r[4], remaining: r[5] }));
   return { ok: true, items };
+}
+
+// 실제 차감 없이 "이 액션을 하면 얼마가 나가는지" 미리보기(사용 전 확인 팝업용).
+async function getCreditQuote(env, userId, actionKey) {
+  if (!actionKey) return { ok: false, error: 'actionKey가 필요합니다.' };
+  const u = await findUser(env, userId);
+  if (!u) return { ok: false, error: '사용자를 찾을 수 없습니다.' };
+  if (String(u.role) === '관리자') return { ok: true, unlimited: true };
+  const monthlyCredit = parseInt(u.monthlyCredit, 10);
+  if (isNaN(monthlyCredit) || monthlyCredit <= 0) return { ok: true, unlimited: true };
+  const cost = await getCreditCost(env, actionKey);
+  const currentMonth = monthKST();
+  let remaining = parseInt(u.remainingCredit, 10);
+  if (String(u.creditResetMonth || '') !== currentMonth || isNaN(remaining)) remaining = monthlyCredit;
+  return { ok: true, unlimited: false, cost, remaining, monthlyCredit };
 }
 
 // 차감 없이 현재 잔여 크레딧만 조회(설정 화면 표시용) — lazy reset 여부만 계산해서 보여주고 시트는 안 건드림.
@@ -512,6 +527,7 @@ export default {
         if (data.action === 'useCredit') return jsonResponse(await useCredit(env, data.userId, data.actionKey || ''));
         if (data.action === 'creditStatus') return jsonResponse(await getCreditStatus(env, data.userId));
         if (data.action === 'creditHistory') return jsonResponse(await getCreditHistory(env, data.userId, data.n || 50));
+        if (data.action === 'creditQuote') return jsonResponse(await getCreditQuote(env, data.userId, data.actionKey || ''));
       }
 
       if (data.token !== env.SHARED_TOKEN) return jsonResponse({ error: 'Unauthorized' });

@@ -414,7 +414,7 @@ async function blogAnalyzeFreeText(btn) {
   var orig = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = '분석 중...'; }
   try {
-    await useCredit('blog_analyze');
+    await useCreditConfirm('blog_analyze', 'AI자율분석');
     var systemPrompt = '당신은 블로그 기획 보조 도구입니다. 사용자의 자유 서술을 분석해 블로그 글 작성에 필요한 핵심 정보를 추출합니다.\n\n반드시 아래 JSON 형식으로만 응답하세요.\n{"topic":"글의 핵심 주제 한 문장 (25~50자)","keywords":"검색 키워드 3~5개, 쉼표로 구분","type":"아래 중 하나만 선택: 교육칼럼, 입시정보, 학원홍보, 합격인터뷰, 수학정보, 이벤트안내, 학원공지","mood":"아래 중 하나만 선택: 차분하고 신뢰감 있는, 친근하고 공감가는, 전문적이고 정보 중심의, 설득력 있고 참여를 유도하는, 따뜻하고 응원하는","target":"타겟 독자층 한 문장 (예: 초등 고학년 자녀를 둔 학부모)"}';
     var raw = await blogCall(systemPrompt, input, 1024);
     var parsed = blogParseJson(raw);
@@ -425,24 +425,10 @@ async function blogAnalyzeFreeText(btn) {
     if (parsed.target)    document.getElementById('blog-target').value = parsed.target;
     if (btn) { btn.textContent = '반영됨'; setTimeout(function() { btn.textContent = orig; }, 1500); }
   } catch(e) {
-    blogShowFreeAlert(e.message || '분석 중 오류가 발생했습니다.');
+    if (!e.cancelled) blogShowFreeAlert(e.message || '분석 중 오류가 발생했습니다.');
     if (btn) btn.textContent = orig;
   } finally {
     if (btn) btn.disabled = false;
-  }
-}
-
-// 블로그 작성 페이지 상단의 "이번 달 크레딧" 표시 갱신
-async function blogUpdateQuotaStatus() {
-  var el = document.getElementById('blog-quota-status');
-  if (!el) return;
-  el.textContent = '크레딧 현황 확인 중...';
-  try {
-    var q = await getCreditStatus();
-    if (!q || q.unlimited) { el.textContent = '이번 달 크레딧: 무제한'; return; }
-    el.textContent = '이번 달 크레딧: ' + q.remaining + ' / ' + q.monthlyCredit;
-  } catch(e) {
-    el.textContent = '';
   }
 }
 
@@ -450,8 +436,8 @@ async function blogGenerateDraft() {
   var topic = document.getElementById('blog-topic').value.trim();
   if (!topic) { blogShowAlert('1', '주제를 입력해주세요.'); return; }
   try {
-    await useCredit('blog_generate');
-  } catch(qe) { blogShowAlert('1', qe.message || '크레딧 확인에 실패했습니다.'); return; }
+    await useCreditConfirm('blog_generate', '블로그 초안 생성');
+  } catch(qe) { if (!qe.cancelled) blogShowAlert('1', qe.message || '크레딧 확인에 실패했습니다.'); return; }
   blogHideAlert('1');
   blogState.inputs = {
     type:     (document.getElementById('blog-type')     || {}).value || '',
@@ -574,7 +560,7 @@ async function blogFinalize(triggerBtn) {
   var btnOrig = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = '최종 본문 작성중...'; }
   try {
-    await useCredit('blog_finalize');
+    await useCreditConfirm('blog_finalize', '블로그 최종안 생성');
     var userMsg = '[최초 입력값]\n' + blogBuildInputText()
       + '\n\n[확정된 글 설계도]\n' + JSON.stringify(updatedDraft, null, 2)
       + '\n\n[추가 수정 요청]\n' + (notes || '없음')
@@ -614,9 +600,8 @@ async function blogFinalize(triggerBtn) {
       sectionGuide: blogState.inputs._sectionGuide                    || '',
       promptVersion: BLOG_PROMPT_VERSION
     });
-    blogUpdateQuotaStatus();
   } catch(e) {
-    blogShowAlert('2', e.message || '오류가 발생했습니다.');
+    if (!e.cancelled) blogShowAlert('2', e.message || '오류가 발생했습니다.');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = btnOrig; }
   }

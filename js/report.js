@@ -99,12 +99,15 @@ async function reportGenerate(btn) {
   if (!region) { alert('지역을 입력해주세요'); return; }
 
   var orig = btn.textContent;
+  try {
+    await useCreditConfirm('report_generate', '지역 트렌드 리포트 생성');
+  } catch (ce) { if (!ce.cancelled) alert(ce.message || '크레딧 확인에 실패했습니다.'); return; }
+
   btn.disabled = true;
   btn.textContent = '⏳ 블로그 수집 중...';
   if (resultEl) resultEl.innerHTML = '';
 
   try {
-    await useCredit('report_generate');
     var items = await reportFetchRegionBlogs(region);
     if (!items.length) {
       if (resultEl) resultEl.innerHTML = '<p style="font-size:14px;color:var(--txt);">최근 3개월 내 "' + reportEsc(region) + ' 수학학원" 관련 블로그를 찾지 못했습니다.</p>';
