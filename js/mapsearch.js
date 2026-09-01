@@ -154,6 +154,13 @@ async function msSearch() {
     return;
   }
 
+  try {
+    await useCreditConfirm('mapsearch_nearby', '주변 학원 검색');
+  } catch (ce) {
+    if (!ce.cancelled && countEl) countEl.textContent = ce.message || '크레딧 확인에 실패했습니다.';
+    return;
+  }
+
   msState.loading = true;
   if (countEl) countEl.textContent = '검색 중...';
   if (wrap) wrap.innerHTML = '<div class="blog-loading show" style="grid-column:1/-1;"><span class="blog-spinner"></span>인근 학원을 검색하고 있습니다...</div>';

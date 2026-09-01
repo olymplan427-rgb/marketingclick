@@ -10,13 +10,14 @@ const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedb
 // 액션키별 기본 크레딧 소모량 — config 시트 G/H열("액션키"/"크레딧비용")에 값이 있으면 그쪽이 우선(코드
 // 재배포 없이 관리자가 조정 가능, 기존 모델 카탈로그 표와 동일한 패턴). 시트에 없을 때만 이 기본값 사용.
 const CREDIT_COST_DEFAULTS = {
-  blog_generate: 3, blog_analyze: 1, blog_finalize: 3, image_promo: 1, mapsearch_search: 1, news_search: 1, report_generate: 5
+  blog_generate: 3, blog_analyze: 1, blog_finalize: 3, image_promo: 1, mapsearch_search: 1,
+  mapsearch_nearby: 1, news_search: 1, report_generate: 5
 };
 // 크레딧 사용 내역(credit_log 시트)에 표시할 한글 이름 — config 시트에 관리자가 적어둔 이름과 통일.
 const ACTION_LABELS = {
   blog_generate: '블로그 초안 생성', blog_analyze: 'AI자율분석', blog_finalize: '블로그 최종안 생성',
   image_promo: '이미지 홍보문구 생성', mapsearch_search: '지도검색 블로그 취합',
-  news_search: '기사검색 주제 추천', report_generate: '지역 트렌드 리포트 생성'
+  mapsearch_nearby: '주변 학원 검색', news_search: '기사검색 주제 추천', report_generate: '지역 트렌드 리포트 생성'
 };
 const CREDIT_LOG_SHEET = 'credit_log';
 const SCHOOL_SHARE_SHEET = 'school_share';
@@ -337,18 +338,21 @@ async function schoolShareSearch(env, sidoCode, sggCode, schulKndCode) {
 
 // config 시트(A~C열: 설정/값/모델, E~F열: 프로바이더/모델 표) 조회 — gas/blog_tracker.gs의
 // _getConfigValue/_getConfiguredModel/_getModelCatalogFromSheet/_getModelListForProvider/
-// _getActiveProvider를 그대로 포팅. 매 호출마다 시트를 읽어서 관리자가 시트만 고치면
-// 코드 재배포 없이 즉시 반영되는 기존 동작을 유지한다.
-async function getConfigValue(env, key) {
-  const rows = await getValues(env, CONFIG_SHEET + '!A2:C');
+// _getActiveProvider를 그대로 포팅하되, AI 프록시 호출 1건당 A~C열을 3번씩 중복으로 읽던 것을
+// getConfigRows()로 한 번만 읽어 재사용하도록 합침(요청당 Sheets API 왕복 3회 → 1회, 그만큼 AI
+// 응답 시작까지의 지연 단축). 관리자가 시트만 고치면 코드 재배포 없이 즉시 반영되는 동작은 그대로.
+async function getConfigRows(env) {
+  return getValues(env, CONFIG_SHEET + '!A2:C');
+}
+
+function pickConfigValue(rows, key) {
   for (const r of rows) {
     if (String(r[0]) === key && r[1]) return String(r[1]);
   }
   return '';
 }
 
-async function getConfiguredModel(env, provider) {
-  const rows = await getValues(env, CONFIG_SHEET + '!A2:C');
+function pickConfiguredModel(rows, provider) {
   const keyRow = AI_KEY_PROP[provider];
   for (const r of rows) {
     if (String(r[0]) === keyRow && r[2]) return String(r[2]);
@@ -367,9 +371,9 @@ async function getModelListForProvider(env, provider) {
   return list.length ? list : (AI_MODEL_CATALOG[provider] || []);
 }
 
-async function getActiveProvider(env) {
+function pickActiveProvider(rows) {
   for (const p of AI_PROVIDERS) {
-    if (await getConfigValue(env, AI_KEY_PROP[p])) return p;
+    if (pickConfigValue(rows, AI_KEY_PROP[p])) return p;
   }
   return 'claude';
 }
@@ -396,10 +400,11 @@ async function callAiRelay(env, body) {
 // gas/blog_tracker.gs의 _aiProxy 포팅 — 활성 프로바이더(키가 채워진 첫 프로바이더)로 1회 호출.
 // gemini가 활성인 경우에만 config 시트의 모델 목록 전체를 폴백용으로 함께 넘긴다.
 async function claudeProxy(env, payload) {
-  const provider = await getActiveProvider(env);
-  const apiKey = await getConfigValue(env, AI_KEY_PROP[provider]);
+  const rows = await getConfigRows(env);
+  const provider = pickActiveProvider(rows);
+  const apiKey = pickConfigValue(rows, AI_KEY_PROP[provider]);
   if (!apiKey) return { ok: false, error: 'config 시트에 ' + AI_KEY_PROP[provider] + ' 값이 아직 입력되지 않았습니다.' };
-  const model = await getConfiguredModel(env, provider);
+  const model = pickConfiguredModel(rows, provider);
   const models = provider === 'gemini' ? [model, ...(await getModelListForProvider(env, provider)).filter((m) => m !== model)] : [model];
   return callAiRelay(env, {
     provider, apiKey, models,
@@ -411,9 +416,10 @@ async function claudeProxy(env, payload) {
 
 // gas/blog_tracker.gs의 _geminiProxy 포팅 — 뉴스 소재추천/지역 트렌드 리포트 전용, 항상 Gemini만 사용.
 async function geminiProxy(env, payload) {
-  const apiKey = await getConfigValue(env, 'GEMINI_API_KEY');
+  const rows = await getConfigRows(env);
+  const apiKey = pickConfigValue(rows, 'GEMINI_API_KEY');
   if (!apiKey) return { ok: false, error: 'config 시트에 GEMINI_API_KEY가 아직 설정되지 않았습니다.' };
-  const preferred = await getConfiguredModel(env, 'gemini');
+  const preferred = pickConfiguredModel(rows, 'gemini');
   const fallback = await getModelListForProvider(env, 'gemini');
   const models = [preferred, ...fallback.filter((m) => m !== preferred)];
   const result = await callAiRelay(env, {
