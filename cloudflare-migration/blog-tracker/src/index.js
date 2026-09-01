@@ -1,7 +1,8 @@
 // 구글시트(sheets.js) → D1(SQLite) 전환 (2026-09-01) — 매 요청마다 걸리던 Google OAuth 재인증 +
 // Sheets API 왕복이 없어지고, Worker 내부에서 로컬 SQLite 쿼리로 끝나 응답 속도가 크게 개선됨.
 // 클라이언트(js/common.js)는 전혀 수정 불필요 — 액션/응답 형태 100% 동일하게 유지.
-const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus', 'creditHistory', 'creditQuote'];
+const ADMIN_ACTIONS = ['adminListUsers', 'adminUpdateUser', 'adminGetConfig', 'adminSetConfigValue', 'adminSetModels', 'adminSetCreditCost'];
+const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus', 'creditHistory', 'creditQuote', ...ADMIN_ACTIONS];
 
 // 액션키별 기본 크레딧 소모량 — config_credit_costs 테이블에 값이 있으면 그쪽이 우선(코드 재배포
 // 없이 D1 값만 바꿔 조정 가능, 기존 구글시트 config 표와 동일한 우선순위 패턴). 없을 때만 기본값 사용.
@@ -371,6 +372,80 @@ async function geminiProxy(env, payload) {
   return { ok: true, text: result.text, model: result.model };
 }
 
+// ── 관리자 페이지 (2026-09-01, D1 전환 후 시트 대신 여기서 설정 관리) ──────
+// API 키는 클라이언트로 마스킹해서만 내려주고(앞 4자+뒤 4자), 저장 시 빈 값이면 기존 값을 유지한다
+// — 화면에 평문 키를 그대로 노출하지 않으면서도 관리자가 값 존재 여부/일부는 확인 가능하게 함.
+function maskSecret(v) {
+  const s = String(v || '');
+  if (s.length <= 8) return s ? '••••' : '';
+  return s.slice(0, 4) + '••••' + s.slice(-4);
+}
+
+async function adminListUsers(env) {
+  const { results } = await env.DB.prepare('SELECT id,name,academy,status,role,monthly_credit,remaining_credit,credit_reset_month FROM users ORDER BY id ASC').all();
+  return { ok: true, users: results };
+}
+
+async function adminUpdateUser(env, id, patch) {
+  if (!id) return { ok: false, error: 'id가 필요합니다.' };
+  const u = await findUser(env, id);
+  if (!u) return { ok: false, error: '사용자를 찾을 수 없습니다.' };
+  const status = patch.status !== undefined ? patch.status : u.status;
+  const role = patch.role !== undefined ? patch.role : u.role;
+  const monthlyCredit = patch.monthlyCredit !== undefined && patch.monthlyCredit !== '' ? parseInt(patch.monthlyCredit, 10) : u.monthlyCredit;
+  const remainingCredit = patch.remainingCredit !== undefined && patch.remainingCredit !== '' ? parseInt(patch.remainingCredit, 10) : u.remainingCredit;
+  await env.DB.prepare('UPDATE users SET status=?, role=?, monthly_credit=?, remaining_credit=? WHERE id=?')
+    .bind(status, role, monthlyCredit, remainingCredit, id).run();
+  return { ok: true };
+}
+
+async function adminGetConfig(env) {
+  const configMap = await getAllConfigRows(env);
+  const keys = AI_PROVIDERS.map((p) => {
+    const row = configMap[AI_KEY_PROP[p]] || {};
+    return { key: AI_KEY_PROP[p], provider: p, hasValue: !!row.value, maskedValue: maskSecret(row.value), model: row.model || AI_DEFAULT_MODEL[p] };
+  });
+  const models = {};
+  for (const p of AI_PROVIDERS) models[p] = await getModelListForProvider(env, p);
+  const { results: costRows } = await env.DB.prepare('SELECT action_key, cost FROM config_credit_costs').all();
+  const costMap = {};
+  costRows.forEach((r) => { costMap[r.action_key] = r.cost; });
+  const creditCosts = Object.keys(CREDIT_COST_DEFAULTS).map((actionKey) => ({
+    actionKey, label: ACTION_LABELS[actionKey] || actionKey,
+    cost: costMap[actionKey] !== undefined ? costMap[actionKey] : CREDIT_COST_DEFAULTS[actionKey]
+  }));
+  return { ok: true, keys, models, creditCosts };
+}
+
+async function adminSetConfigValue(env, key, value, model) {
+  if (!key) return { ok: false, error: 'key가 필요합니다.' };
+  const existing = await getConfigRow(env, key);
+  const finalValue = (value === undefined || value === '') ? (existing ? existing.value : '') : value;
+  const finalModel = (model === undefined || model === '') ? (existing ? existing.model : '') : model;
+  await env.DB.prepare('INSERT INTO config (key,value,model) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, model=excluded.model')
+    .bind(key, finalValue, finalModel).run();
+  return { ok: true };
+}
+
+async function adminSetModels(env, provider, modelList) {
+  if (!provider || !Array.isArray(modelList)) return { ok: false, error: 'provider/models가 필요합니다.' };
+  await env.DB.prepare('DELETE FROM config_models WHERE provider = ?').bind(provider).run();
+  const stmts = modelList.filter(Boolean).map((m, i) =>
+    env.DB.prepare('INSERT INTO config_models (provider,model,ord) VALUES (?,?,?)').bind(provider, m, i)
+  );
+  if (stmts.length) await env.DB.batch(stmts);
+  return { ok: true };
+}
+
+async function adminSetCreditCost(env, actionKey, cost) {
+  if (!actionKey) return { ok: false, error: 'actionKey가 필요합니다.' };
+  const n = parseInt(cost, 10);
+  if (isNaN(n)) return { ok: false, error: 'cost가 숫자가 아닙니다.' };
+  await env.DB.prepare('INSERT INTO config_credit_costs (action_key,cost) VALUES (?,?) ON CONFLICT(action_key) DO UPDATE SET cost=excluded.cost')
+    .bind(actionKey, n).run();
+  return { ok: true };
+}
+
 // ── 네이버 블로그 본문 수집 (참고 URL 기능용) ──────────────────────
 function normalizeNaverMobileUrl(url) {
   const raw = (url || '').trim();
@@ -459,7 +534,16 @@ export default {
         if (data.token !== env.SHARED_TOKEN) return jsonResponse({ ok: false, error: 'Unauthorized' });
         const v = await verifyUser(env, data.userId, data.userPw, data.site);
         if (!v.valid) return jsonResponse({ ok: false, error: v.error });
+        if (ADMIN_ACTIONS.includes(data.action) && String(v.role) !== '관리자') {
+          return jsonResponse({ ok: false, error: '관리자만 접근할 수 있습니다.' });
+        }
         if (data.action === 'login') return jsonResponse({ ok: true, name: v.name, academy: v.academy, role: v.role || '' });
+        if (data.action === 'adminListUsers') return jsonResponse(await adminListUsers(env));
+        if (data.action === 'adminUpdateUser') return jsonResponse(await adminUpdateUser(env, data.targetId || '', data.patch || {}));
+        if (data.action === 'adminGetConfig') return jsonResponse(await adminGetConfig(env));
+        if (data.action === 'adminSetConfigValue') return jsonResponse(await adminSetConfigValue(env, data.key || '', data.value, data.model));
+        if (data.action === 'adminSetModels') return jsonResponse(await adminSetModels(env, data.provider || '', data.models || []));
+        if (data.action === 'adminSetCreditCost') return jsonResponse(await adminSetCreditCost(env, data.actionKey || '', data.cost));
         if (data.action === 'myPosts') return jsonResponse({ ok: true, posts: await getMyPosts(env, data.userId, data.n || 100) });
         if (data.action === 'claudeProxy') return aiJsonResponse(await claudeProxy(env, data.payload));
         if (data.action === 'geminiProxy') return aiJsonResponse(await geminiProxy(env, data.payload));

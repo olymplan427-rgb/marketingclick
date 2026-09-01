@@ -124,6 +124,11 @@ function showPage(id) {
     var navFb = document.getElementById('nav-feedback');
     if (navFb) navFb.classList.add('active');
     if (typeof feedbackInit === 'function') feedbackInit();
+  } else if (id === 'admin') {
+    document.getElementById('page-admin').classList.add('active');
+    var navAd = document.getElementById('nav-admin');
+    if (navAd) navAd.classList.add('active');
+    if (typeof adminInit === 'function') adminInit();
   }
 }
 
@@ -303,6 +308,7 @@ function hideLoginOverlay() {
   if (nameEl && auth) nameEl.textContent = auth.name + (auth.academy ? ' · ' + auth.academy : '');
   maybeShowBetaIntro();
   if (typeof creditUpdateBadge === 'function') creditUpdateBadge();
+  applyAdminVisibility();
 }
 
 // ── 베타 시작 안내 모달 — "다시 보지 않기" 체크 시 계정별로 재노출 안 함 ──
@@ -591,6 +597,42 @@ async function gasFeedbackReply(threadId, content) {
   if (!json.ok) throw new Error(json.error || '답변 등록 실패');
 }
 
+// ── 관리자 페이지 (역할==='관리자'만 서버에서 허용, 프론트는 sidebar 노출만 담당) ──
+async function _adminCall(action, extra) {
+  var auth = getUserAuth();
+  if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
+  var cfg = getGasConfig();
+  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류');
+  var body = Object.assign({ action: action, token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId() }, extra || {});
+  var json = await _fetchGasJson(cfg.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body)
+  });
+  if (!json.ok) throw new Error(json.error || '요청 실패');
+  return json;
+}
+
+async function adminListUsers() {
+  var json = await _adminCall('adminListUsers');
+  return json.users || [];
+}
+async function adminUpdateUser(targetId, patch) {
+  return _adminCall('adminUpdateUser', { targetId: targetId, patch: patch });
+}
+async function adminGetConfig() {
+  return _adminCall('adminGetConfig');
+}
+async function adminSetConfigValue(key, value, model) {
+  return _adminCall('adminSetConfigValue', { key: key, value: value, model: model });
+}
+async function adminSetModels(provider, models) {
+  return _adminCall('adminSetModels', { provider: provider, models: models });
+}
+async function adminSetCreditCost(actionKey, cost) {
+  return _adminCall('adminSetCreditCost', { actionKey: actionKey, cost: cost });
+}
+
 // ── 기능별 on/off (flags.js가 배포 시 window.FEATURE_FLAGS 일부를 덮어씀) ──
 function applyFeatureFlags() {
   var f = window.FEATURE_FLAGS || {};
@@ -618,6 +660,14 @@ function applyFeatureFlags() {
     var imgPromoSec = document.getElementById('img-promo-section');
     if (imgPromoSec) imgPromoSec.style.display = 'none';
   }
+}
+
+// 관리자(role==='관리자') 로그인 시에만 사이드바에 "관리자" 메뉴 노출 — hideLoginOverlay()에서 매번 호출.
+function applyAdminVisibility() {
+  var navAdmin = document.getElementById('nav-admin');
+  if (!navAdmin) return;
+  var auth = getUserAuth();
+  navAdmin.style.display = (auth && auth.role === '관리자') ? '' : 'none';
 }
 
 // ── 모델 선택 ─────────────────────────────────────────────────────

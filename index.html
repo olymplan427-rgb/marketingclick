@@ -69,6 +69,9 @@
       <div class="sidebar-subitem active" id="nav-settings-prompt" onclick="showPage('settings-prompt')">프롬프트 설정</div>
       <div class="sidebar-subitem" id="nav-settings-instagram" onclick="showPage('settings-instagram')">인스타그램 연동</div>
     </div>
+    <div class="sidebar-item" id="nav-admin" onclick="showPage('admin')" style="display:none;">
+      <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/></svg></span>관리자
+    </div>
     <div class="sidebar-item" id="nav-logout" onclick="logoutUser()">
       <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg></span>로그아웃
     </div>
@@ -193,7 +196,7 @@
 <script>
 (function() {
   var container = document.getElementById('main-container');
-  var pages = ['pages/image.html', 'pages/blog.html', 'pages/monitor.html', 'pages/mapsearch.html', 'pages/report.html', 'pages/schoolshare.html', 'pages/credit.html', 'pages/feedback.html', 'pages/settings.html'];
+  var pages = ['pages/image.html', 'pages/blog.html', 'pages/monitor.html', 'pages/mapsearch.html', 'pages/report.html', 'pages/schoolshare.html', 'pages/credit.html', 'pages/feedback.html', 'pages/settings.html', 'pages/admin.html'];
   pages.forEach(function(url) {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, false); // synchronous — 로컬 서버 전용
@@ -222,6 +225,7 @@
 <script src="js/schoolshare.js"></script>
 <script src="js/credit.js"></script>
 <script src="js/feedback.js"></script>
+<script src="js/admin.js"></script>
 <script src="js/common.js"></script>
 </body>
 </html>
