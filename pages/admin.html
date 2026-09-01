@@ -81,9 +81,19 @@
             <tbody id="admin-post-body"></tbody>
           </table>
         </div>
-        <div id="admin-post-detail" style="margin-top:10px;"></div>
       </div>
 
       <div id="admin-alert" class="blog-alert err"></div>
+    </div>
+
+    <!-- 글 본문 팝업 (ms-modal 패턴 재사용) -->
+    <div class="ms-modal-overlay" id="admin-post-modal" style="display:none;" onclick="if(event.target===this) adminCloseModal()">
+      <div class="ms-modal-box">
+        <div class="ms-modal-header">
+          <div class="ms-modal-title" id="admin-post-modal-title"></div>
+          <button class="ms-modal-close" onclick="adminCloseModal()">✕</button>
+        </div>
+        <div class="ms-modal-body" id="admin-post-modal-body"></div>
+      </div>
     </div>
   </div><!-- /page-admin -->
