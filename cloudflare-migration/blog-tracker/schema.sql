@@ -84,3 +84,12 @@ CREATE TABLE IF NOT EXISTS announcements (
   body TEXT,
   created_at TEXT
 );
+
+-- AI 생성 요청 순차 처리용 락(2026-09) — 여러 사용자가 동시에 생성 버튼을 눌러도
+-- Vercel 릴레이/AI API로는 한 번에 하나씩만 나가도록 직렬화한다. 행 1개만 사용.
+CREATE TABLE IF NOT EXISTS gen_lock (
+  id INTEGER PRIMARY KEY,
+  holder TEXT,
+  acquired_at INTEGER
+);
+INSERT OR IGNORE INTO gen_lock (id, holder, acquired_at) VALUES (1, NULL, NULL);

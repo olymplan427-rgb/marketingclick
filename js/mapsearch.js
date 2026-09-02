@@ -175,6 +175,7 @@ async function msSearch() {
     if (countEl) {
       countEl.textContent = address + ' 기준, 반경 ' + msRadiusLabel(msState.radius) + ' 이내 "' + msState.keyword + '" ' + msState.results.length + '건';
     }
+    await useCreditCommit('mapsearch_nearby');
     msRenderList();
   } catch (e) {
     msState.results = [];

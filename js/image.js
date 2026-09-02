@@ -1500,6 +1500,7 @@ document.getElementById('p2-dl').addEventListener('click', async function() {
   try {
     await useCreditConfirm('image_download', '이미지 다운로드');
   } catch (ce) { return; }
+  await useCreditCommit('image_download');
   var prevSel = p2State.selId;
   var prevLogo = p2State.selLogoFile;
   var prevCrop = p2State.cropMode;
@@ -1839,6 +1840,7 @@ function initAiPromoControls() {
         setAiStatus('오류: ' + result.error, 'err');
         return;
       }
+      await useCreditCommit('image_promo');
       var formatted = formatPromoResult(result.text);
       if (resultEl) resultEl.value = formatted;
       setAiStatus('생성 완료', 'ok');

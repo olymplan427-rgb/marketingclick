@@ -439,6 +439,7 @@ async function blogAnalyzeFreeText(btn) {
     await useCreditConfirm('blog_analyze', 'AI자율분석');
     var systemPrompt = '당신은 블로그 기획 보조 도구입니다. 사용자의 자유 서술을 분석해 블로그 글 작성에 필요한 핵심 정보를 추출합니다.\n\n반드시 아래 JSON 형식으로만 응답하세요.\n{"topic":"글의 핵심 주제 한 문장 (25~50자)","keywords":"검색 키워드 3~5개, 쉼표로 구분","type":"아래 중 하나만 선택: 교육칼럼, 입시정보, 학원홍보, 합격인터뷰, 수학정보, 이벤트안내, 학원공지","mood":"아래 중 하나만 선택: 차분하고 신뢰감 있는, 친근하고 공감가는, 전문적이고 정보 중심의, 설득력 있고 참여를 유도하는, 따뜻하고 응원하는","target":"타겟 독자층 한 문장 (예: 초등 고학년 자녀를 둔 학부모)"}';
     var raw = await blogCall(systemPrompt, input, 1024);
+    await useCreditCommit('blog_analyze');
     var parsed = blogParseJson(raw);
     if (parsed.topic)    document.getElementById('blog-topic').value = parsed.topic;
     if (parsed.keywords) document.getElementById('blog-keywords').value = parsed.keywords;
@@ -510,6 +511,7 @@ async function blogGenerateDraft() {
       }
     }
     var draft = await blogGenerateWithRepair(systemPrompt, blogBuildInputText(), 4096, 8192);
+    await useCreditCommit('blog_generate');
     blogState.draft = draft;
     blogRenderOutline(draft);
     blogGoStep(2);
@@ -592,6 +594,7 @@ async function blogFinalize(triggerBtn) {
       + '- 결론은 ctaDirection 방향으로 마무리한다.\n'
       + '- 추가 수정 요청이 설계도와 충돌하지 않는 한 설계도를 유지한다.';
     var result = await blogGenerateWithRepair(applyAcademyVars(getBlogFinalSystem()), userMsg, 8192, 16000);
+    await useCreditCommit('blog_finalize');
     var bannedFound = blogFilterBannedWords(result);
     blogStripBold(result);
     blogState.result = result;

@@ -102,6 +102,7 @@ async function newsSuggestTopics(btn) {
     var topics = (parsed && parsed.topics) || [];
     if (!topics.length) { alert('추천할 만한 주제를 찾지 못했습니다.'); return; }
 
+    await useCreditCommit('news_search');
     window._newsRaw = newsForAI;
     newsRenderTopicSuggestions(topics);
   } catch (e) {
