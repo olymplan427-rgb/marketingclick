@@ -2,9 +2,36 @@
 // 학교 검색은 학교알리미 OpenAPI(schoolinfo.go.kr)를 blog-tracker Worker(action=schoolShareSearch)로
 // 서버사이드 프록시해서 받는다 — 브라우저 직접호출은 CORS로 막혀서 안 됨. 시/도·시군구 코드 매핑은
 // js/schoolRegionCodes.js (index.html에서 이 파일보다 먼저 로드됨).
+//
+// 데이터 모델(저장 JSON): { schools: [{code,name,type,maxGrade,totalByGrade:{1:n,...}}], monthly: { "YYYY-MM": { code: {grade: ours} } } }
+// "전체 학생수"(totalByGrade)는 학교알리미 API값(수정 가능), "우리 학원생 수"(monthly)는 달마다 따로 기록해서
+// 과거 값이 덮어써지지 않게 한다.
 
 let ssSchools = [];
+let ssMonthly = {};
 let ssSearchResults = []; // 최근 검색 결과 캐시 — onclick엔 index만 넘겨서 학교명에 홑따옴표가 있어도 안전
+let ssCompareMonth = null;
+let ssInputMonth = null;
+let ssTrendExpandedCodes = new Set(); // 추이 탭에서 학년별 상세를 펼친 학교 code들
+
+function ssPad2(n) { return String(n).padStart(2, '0'); }
+function ssMonthKeyOf(date) { return date.getFullYear() + '-' + ssPad2(date.getMonth() + 1); }
+function ssCurrentMonthKey() { return ssMonthKeyOf(new Date()); }
+function ssPrevMonthKey(key) {
+  const [y, m] = key.split('-').map(Number);
+  const d = new Date(y, m - 1 - 1, 1);
+  return ssMonthKeyOf(d);
+}
+function ssNextMonthKey(key) {
+  const [y, m] = key.split('-').map(Number);
+  const d = new Date(y, m - 1 + 1, 1);
+  return ssMonthKeyOf(d);
+}
+function ssAllMonthKeys() {
+  const keys = new Set(Object.keys(ssMonthly));
+  keys.add(ssCurrentMonthKey());
+  return Array.from(keys).sort();
+}
 
 function ssPopulateSidoSelect() {
   const sel = document.getElementById('ss-sido-select');
@@ -22,6 +49,59 @@ function ssOnSidoChange() {
   }
   sggSel.innerHTML = '<option value="">시군구 선택</option>' +
     list.map(s => `<option value="${s.code}">${s.name}</option>`).join('');
+}
+
+// ── 탭 전환 ─────────────────────────────────────────────────────
+function ssShowTab(tab) {
+  const compareView = document.getElementById('ss-compare-view');
+  const monthlyView = document.getElementById('ss-monthly-view');
+  const trendView = document.getElementById('ss-trend-view');
+  const btnCompare = document.getElementById('ss-tab-btn-compare');
+  const btnMonthly = document.getElementById('ss-tab-btn-monthly');
+  const btnTrend = document.getElementById('ss-tab-btn-trend');
+  const desc = document.getElementById('ss-tab-desc');
+
+  compareView.style.display = tab === 'compare' ? '' : 'none';
+  monthlyView.style.display = tab === 'monthly' ? '' : 'none';
+  trendView.style.display = tab === 'trend' ? '' : 'none';
+  btnCompare.classList.toggle('active-date', tab === 'compare');
+  btnMonthly.classList.toggle('active-date', tab === 'monthly');
+  btnTrend.classList.toggle('active-date', tab === 'trend');
+
+  if (tab === 'monthly') {
+    desc.textContent = '학교별로 이번 달 재원생 수를 한 번에 입력하세요';
+    ssRenderMonthlyInput();
+  } else if (tab === 'trend') {
+    desc.textContent = '학교별 점유율이 월별로 어떻게 변해왔는지 확인하세요';
+    ssRenderTrendTable();
+  } else {
+    desc.textContent = '왼쪽에서 학교를 검색해 추가한 뒤 점유율을 비교하세요';
+    ssRenderCompareTable();
+  }
+}
+
+// ── 검색 (다중 선택 추가) ───────────────────────────────────────
+function ssRenderSearchResults() {
+  const resultsDiv = document.getElementById('ss-search-results');
+  if (ssSearchResults.length === 0) return;
+  let html = `<div style="max-height:280px; overflow-y:auto; border:1px solid var(--bdr); border-radius:8px;">`;
+  ssSearchResults.forEach((school, idx) => {
+    const isAdded = ssSchools.find(s => s.code === school.code);
+    html += `
+      <label style="padding:10px 12px; border-bottom:1px solid var(--bdr); display:flex; gap:10px; align-items:center; cursor:${isAdded ? 'default' : 'pointer'};">
+        <input type="checkbox" data-idx="${idx}" ${isAdded ? 'disabled checked' : ''} style="flex-shrink:0; width:16px; height:16px;">
+        <div style="flex:1;">
+          <div style="font-weight:bold; font-size:14px;">${school.name}${isAdded ? ' <span style=\'font-size:11px;color:var(--mut);font-weight:normal;\'>(이미 추가됨)</span>' : ''}</div>
+          <div style="font-size:12px; color:var(--mut);">${school.address}</div>
+        </div>
+      </label>
+    `;
+  });
+  html += `</div>
+    <button class="btn btn-primary" style="width:100%; margin-top:8px;" onclick="ssAddSelectedSchools()">선택한 학교 추가</button>
+  `;
+  resultsDiv.style.display = 'block';
+  resultsDiv.innerHTML = html;
 }
 
 async function ssSearchSchool() {
@@ -64,162 +144,323 @@ async function ssSearchSchool() {
       return;
     }
 
-    let html = `<div style="max-height:240px; overflow-y:auto; border:1px solid var(--bdr); border-radius:8px;">`;
-    ssSearchResults.forEach((school, idx) => {
-      const isAdded = ssSchools.find(s => s.code === school.code);
-      html += `
-        <div style="padding:12px; border-bottom:1px solid var(--bdr); display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <div style="font-weight:bold; font-size:14px;">${school.name}</div>
-            <div style="font-size:12px; color:var(--mut);">${school.address}</div>
-          </div>
-          <button class="btn btn-primary" style="padding:4px 8px; font-size:12px;" data-idx="${idx}" onclick="ssAddSchoolFromSearch(this)" ${isAdded ? 'disabled' : ''}>
-            ${isAdded ? '추가됨' : '추가'}
-          </button>
-        </div>
-      `;
-    });
-    html += `</div>`;
-    resultsDiv.innerHTML = html;
+    ssRenderSearchResults();
   } catch (e) {
     console.error(e);
     resultsDiv.innerHTML = `<div style="font-size:13px; color:#ef4444;">API 호출에 실패했습니다.</div>`;
   }
 }
 
-function ssAddSchoolFromSearch(btn) {
-  const idx = parseInt(btn.getAttribute('data-idx'), 10);
-  const school = ssSearchResults[idx];
-  if (!school) return;
-  ssAddSchool(school.code, school.name, school.kindCode, school.grades);
-}
-
-function ssAddSchool(code, name, kindCode, apiGrades) {
-  if (ssSchools.find(s => s.code === code)) return;
-
-  // 학제에 따른 학년 수 설정 (초등 6, 중/고 3)
-  const maxGrade = kindCode === '02' ? 6 : 3;
-  const typeName = kindCode === '02' ? '초등학교' : (kindCode === '03' ? '중학교' : '고등학교');
-
-  const newSchool = {
-    code,
-    name,
-    type: typeName,
-    maxGrade,
-    grades: {}
-  };
-
-  for (let i = 1; i <= maxGrade; i++) {
-    const apiTotal = apiGrades && apiGrades[i];
-    newSchool.grades[i] = { total: apiTotal || 0, ours: 0 };
+function ssAddSelectedSchools() {
+  const checked = document.querySelectorAll('#ss-search-results input[type="checkbox"]:checked:not(:disabled)');
+  if (checked.length === 0) {
+    showToast('추가할 학교를 선택하세요.');
+    return;
   }
-
-  ssSchools.push(newSchool);
-  document.getElementById('ss-search-results').style.display = 'none';
-  ssRenderSchools();
-  showToast(`${name} 추가되었습니다.`);
+  let addedCount = 0;
+  checked.forEach((box) => {
+    const idx = parseInt(box.getAttribute('data-idx'), 10);
+    const school = ssSearchResults[idx];
+    if (!school || ssSchools.find(s => s.code === school.code)) return;
+    const maxGrade = school.kindCode === '02' ? 6 : 3;
+    const typeName = school.kindCode === '02' ? '초등학교' : (school.kindCode === '03' ? '중학교' : '고등학교');
+    ssSchools.push({ code: school.code, name: school.name, type: typeName, maxGrade, totalByGrade: school.grades || {} });
+    addedCount++;
+  });
+  ssRenderSearchResults(); // 목록은 유지하고 "이미 추가됨" 상태만 갱신 — 계속 더 골라 추가할 수 있게
+  ssRenderCompareTable();
+  ssRenderMonthlyInput();
+  ssRenderTrendTable();
+  showToast(`${addedCount}개 학교가 추가되었습니다.`);
 }
 
 function ssRemoveSchool(code) {
   ssSchools = ssSchools.filter(s => s.code !== code);
-  ssRenderSchools();
+  ssRenderCompareTable();
 }
 
-function ssUpdateData(code, grade, field, value) {
-  const school = ssSchools.find(s => s.code === code);
-  if (school) {
-    const num = parseInt(value, 10);
-    school.grades[grade][field] = isNaN(num) ? 0 : num;
-    ssRenderSchoolCard(school); // Re-render only this card
+// ── 비교 통표 ───────────────────────────────────────────────────
+function ssShareTier(percent) {
+  if (percent >= 20) return 'background:var(--acc); color:#fff;';
+  if (percent >= 10) return 'background:var(--acc-border);';
+  if (percent > 0) return 'background:var(--acc-light);';
+  return '';
+}
+
+// 학교의 특정 월 합계 점유율(학년 전체 합산) — 비교/추이 탭이 공유
+function ssSchoolMonthPercent(school, monthKey) {
+  const monthData = (ssMonthly[monthKey] && ssMonthly[monthKey][school.code]) || {};
+  let sumTotal = 0, sumOurs = 0;
+  for (let g = 1; g <= school.maxGrade; g++) {
+    sumTotal += school.totalByGrade[g] || 0;
+    sumOurs += monthData[g] || 0;
   }
+  return { sumTotal, sumOurs, percent: sumTotal > 0 ? (sumOurs / sumTotal * 100) : 0 };
 }
 
-function ssRenderSchools() {
+// 학교의 특정 월·특정 학년 점유율 — 추이 탭의 학년별 상세 펼침에서 사용
+function ssGradePercent(school, monthKey, grade) {
+  const monthData = (ssMonthly[monthKey] && ssMonthly[monthKey][school.code]) || {};
+  const total = school.totalByGrade[grade] || 0;
+  const ours = monthData[grade] || 0;
+  return total > 0 ? (ours / total * 100) : 0;
+}
+
+// %p 증감을 ▲/▼/– 화살표로 — 비교/추이 탭이 공유
+function ssArrowHtml(diff) {
+  const arrow = diff > 0 ? '▲' : (diff < 0 ? '▼' : '–');
+  const color = diff > 0 ? '#16a34a' : (diff < 0 ? '#ef4444' : 'var(--mut)');
+  return `<span style="color:${color}; font-weight:bold;">${arrow} ${Math.abs(diff).toFixed(1)}%p</span>`;
+}
+
+function ssOnCompareMonthChange(value) {
+  ssCompareMonth = value;
+  ssRenderCompareTable();
+}
+
+function ssRenderCompareTable() {
   const container = document.getElementById('ss-schools-container');
-  container.innerHTML = '';
-  
   if (ssSchools.length === 0) {
-    container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--mut); font-size:14px; border:1px dashed var(--bdr); border-radius:8px;">추가된 학교가 없습니다.</div>';
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-title">아직 추가한 학교가 없습니다</div><div class="empty-state-desc">왼쪽에서 학교를 검색해 추가해보세요</div></div>';
     return;
   }
-  
-  ssSchools.forEach(school => {
-    const card = document.createElement('div');
-    card.id = `ss-card-${school.code}`;
-    card.style.cssText = 'border:1px solid var(--bdr); border-radius:12px; padding:20px; margin-bottom:16px; background:#fff;';
-    container.appendChild(card);
-    ssRenderSchoolCard(school);
-  });
-}
 
-function ssRenderSchoolCard(school) {
-  const card = document.getElementById(`ss-card-${school.code}`);
-  if (!card) return;
-  
+  if (!ssCompareMonth) ssCompareMonth = ssAllMonthKeys()[ssAllMonthKeys().length - 1];
+  const monthKeys = ssAllMonthKeys();
+  const prevKey = ssPrevMonthKey(ssCompareMonth);
+  const maxGradeOverall = Math.max(...ssSchools.map(s => s.maxGrade));
+
   let html = `
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-      <h3 style="margin:0; font-size:16px; color:var(--acc);">${school.name} <span style="font-size:12px; color:var(--mut); font-weight:normal;">(${school.type})</span></h3>
-      <button class="btn" style="background:#fee2e2; color:#ef4444; border:none; padding:4px 8px; font-size:12px;" data-code="${school.code}" onclick="ssRemoveSchool(this.getAttribute('data-code'))">삭제</button>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+      <button class="btn" style="padding:4px 10px;" onclick="ssOnCompareMonthChange('${ssPrevMonthKey(ssCompareMonth)}')">‹</button>
+      <select class="blog-input" style="width:140px;" onchange="ssOnCompareMonthChange(this.value)">
+        ${monthKeys.map(k => `<option value="${k}" ${k === ssCompareMonth ? 'selected' : ''}>${k}</option>`).join('')}
+      </select>
+      <button class="btn" style="padding:4px 10px;" onclick="ssOnCompareMonthChange('${ssNextMonthKey(ssCompareMonth)}')">›</button>
+      <span style="font-size:12px; color:var(--mut);">해당 월 우리 학원생 수는 "월별 입력" 탭에서 등록</span>
     </div>
     <div style="overflow-x:auto;">
-      <table style="width:100%; border-collapse:collapse; font-size:13px; text-align:center;">
-        <thead>
-          <tr style="background:var(--bg); border-bottom:1px solid var(--bdr);">
-            <th style="padding:10px; border-right:1px solid var(--bdr);">학년</th>
-            <th style="padding:10px; border-right:1px solid var(--bdr);">전체 학생 수<br><span style="font-size:10px; color:var(--mut); font-weight:normal;">(학교알리미 API, 수정 가능)</span></th>
-            <th style="padding:10px; border-right:1px solid var(--bdr);">우리 학원생 수</th>
-            <th style="padding:10px;">점유율</th>
-          </tr>
-        </thead>
-        <tbody>
-  `;
-  
-  let sumTotal = 0;
-  let sumOurs = 0;
-
-  for (let i = 1; i <= school.maxGrade; i++) {
-    const data = school.grades[i];
-    sumTotal += data.total;
-    sumOurs += data.ours;
-    const percent = data.total > 0 ? ((data.ours / data.total) * 100).toFixed(1) : '0.0';
-    
-    html += `
-      <tr style="border-bottom:1px solid var(--bdr);">
-        <td style="padding:10px; border-right:1px solid var(--bdr); font-weight:bold;">${i}학년</td>
-        <td style="padding:10px; border-right:1px solid var(--bdr);">
-          <input type="number" min="0" class="set-input" style="width:70px; text-align:center; padding:4px;" value="${data.total || ''}" onchange="ssUpdateData('${school.code}', ${i}, 'total', this.value)">
-        </td>
-        <td style="padding:10px; border-right:1px solid var(--bdr);">
-          <input type="number" min="0" class="set-input" style="width:70px; text-align:center; padding:4px;" value="${data.ours || ''}" onchange="ssUpdateData('${school.code}', ${i}, 'ours', this.value)">
-        </td>
-        <td style="padding:10px;">
-          <div style="font-weight:bold; color:${percent > 0 ? 'var(--acc)' : 'var(--mut)'}">${percent}%</div>
-          <div style="width:100%; background:var(--bg); height:6px; border-radius:3px; margin-top:4px; overflow:hidden;">
-            <div style="width:${Math.min(percent, 100)}%; background:var(--acc); height:100%;"></div>
-          </div>
-        </td>
-      </tr>
-    `;
-  }
-  
-  // Total Row
-  const totalPercent = sumTotal > 0 ? ((sumOurs / sumTotal) * 100).toFixed(1) : '0.0';
-  html += `
-        <tr style="background:#f8fafc; font-weight:bold;">
-          <td style="padding:10px; border-right:1px solid var(--bdr);">합계</td>
-          <td style="padding:10px; border-right:1px solid var(--bdr);">${sumTotal}명</td>
-          <td style="padding:10px; border-right:1px solid var(--bdr);">${sumOurs}명</td>
-          <td style="padding:10px; color:var(--acc);">${totalPercent}%</td>
+    <table style="width:100%; border-collapse:collapse; font-size:13px; text-align:center;">
+      <thead>
+        <tr style="background:var(--bg); border-bottom:1px solid var(--bdr);">
+          <th style="padding:10px; text-align:left; border-right:1px solid var(--bdr);">학교</th>
+          ${Array.from({ length: maxGradeOverall }, (_, i) => `<th style="padding:10px; border-right:1px solid var(--bdr);">${i + 1}학년</th>`).join('')}
+          <th style="padding:10px; border-right:1px solid var(--bdr);">합계</th>
+          <th style="padding:10px; border-right:1px solid var(--bdr);">전월 대비</th>
+          <th style="padding:10px;"></th>
         </tr>
-        </tbody>
-      </table>
-    </div>
+      </thead>
+      <tbody>
   `;
-  
-  card.innerHTML = html;
+
+  ssSchools.forEach((school) => {
+    const monthData = (ssMonthly[ssCompareMonth] && ssMonthly[ssCompareMonth][school.code]) || {};
+    const prevData = (ssMonthly[prevKey] && ssMonthly[prevKey][school.code]) || null;
+    let sumTotal = 0, sumOurs = 0, prevSumTotal = 0, prevSumOurs = 0, hasPrev = false;
+
+    html += `<tr style="border-bottom:1px solid var(--bdr);">
+      <td style="padding:10px; text-align:left; border-right:1px solid var(--bdr);">
+        <div style="font-weight:bold;">${school.name}</div>
+        <div style="font-size:11px; color:var(--mut);">${school.type}</div>
+      </td>`;
+
+    for (let g = 1; g <= maxGradeOverall; g++) {
+      if (g > school.maxGrade) { html += `<td style="padding:10px; border-right:1px solid var(--bdr); color:var(--mut);">-</td>`; continue; }
+      const total = school.totalByGrade[g] || 0;
+      const ours = monthData[g] || 0;
+      sumTotal += total; sumOurs += ours;
+      if (prevData) { hasPrev = true; prevSumTotal += (school.totalByGrade[g] || 0); prevSumOurs += (prevData[g] || 0); }
+
+      const percent = total > 0 ? (ours / total * 100) : 0;
+      html += `<td style="padding:10px; border-right:1px solid var(--bdr); ${ssShareTier(percent)}">
+        <div style="font-weight:bold;">${percent.toFixed(1)}%</div>
+        <div style="font-size:10px; opacity:.8;">${ours}/${total}</div>
+      </td>`;
+    }
+
+    const totalPercent = sumTotal > 0 ? (sumOurs / sumTotal * 100) : 0;
+    let trendHtml = '<span style="color:var(--mut);">–</span>';
+    if (hasPrev && prevSumTotal > 0) {
+      const prevPercent = prevSumOurs / prevSumTotal * 100;
+      trendHtml = ssArrowHtml(totalPercent - prevPercent);
+    }
+
+    html += `
+      <td style="padding:10px; border-right:1px solid var(--bdr); font-weight:bold; ${ssShareTier(totalPercent)}">${totalPercent.toFixed(1)}%</td>
+      <td style="padding:10px; border-right:1px solid var(--bdr);">${trendHtml}</td>
+      <td style="padding:10px; white-space:nowrap;">
+        <span style="cursor:pointer; font-size:12px; color:#ef4444;" data-code="${school.code}" onclick="ssRemoveSchool(this.getAttribute('data-code'))">삭제</span>
+      </td>
+    </tr>`;
+  });
+
+  html += `</tbody></table></div>`;
+  container.innerHTML = html;
 }
 
-// 초기화 시 백엔드에서 데이터 로드
+// ── 월별 입력 ───────────────────────────────────────────────────
+function ssOnInputMonthChange(value) {
+  ssInputMonth = value;
+  ssRenderMonthlyInput();
+}
+
+function ssLoadPrevMonthValues() {
+  const prevKey = ssPrevMonthKey(ssInputMonth);
+  const prevData = ssMonthly[prevKey];
+  if (!prevData) { showToast('직전 달(' + prevKey + ') 데이터가 없습니다.'); return; }
+  if (!ssMonthly[ssInputMonth]) ssMonthly[ssInputMonth] = {};
+  ssSchools.forEach((school) => {
+    const prevSchoolData = prevData[school.code];
+    if (!prevSchoolData) return;
+    if (!ssMonthly[ssInputMonth][school.code]) ssMonthly[ssInputMonth][school.code] = {};
+    for (let g = 1; g <= school.maxGrade; g++) {
+      const existing = ssMonthly[ssInputMonth][school.code][g];
+      if (existing === undefined && prevSchoolData[g] !== undefined) {
+        ssMonthly[ssInputMonth][school.code][g] = prevSchoolData[g];
+      }
+    }
+  });
+  ssRenderMonthlyInput();
+  showToast(prevKey + ' 값을 불러왔습니다 (빈 칸만 채움).');
+}
+
+function ssUpdateMonthlyValue(code, grade, value) {
+  if (!ssMonthly[ssInputMonth]) ssMonthly[ssInputMonth] = {};
+  if (!ssMonthly[ssInputMonth][code]) ssMonthly[ssInputMonth][code] = {};
+  const num = parseInt(value, 10);
+  ssMonthly[ssInputMonth][code][grade] = isNaN(num) ? 0 : num;
+}
+
+function ssRenderMonthlyInput() {
+  const container = document.getElementById('ss-monthly-container');
+  if (ssSchools.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-title">아직 추가한 학교가 없습니다</div><div class="empty-state-desc">왼쪽에서 학교를 검색해 추가해보세요</div></div>';
+    return;
+  }
+  if (!ssInputMonth) ssInputMonth = ssCompareMonth || ssCurrentMonthKey();
+  const maxGradeOverall = Math.max(...ssSchools.map(s => s.maxGrade));
+  const monthData = ssMonthly[ssInputMonth] || {};
+
+  let html = `
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+      <input type="month" class="blog-input" style="width:160px;" value="${ssInputMonth}" onchange="ssOnInputMonthChange(this.value)">
+      <button class="btn" onclick="ssLoadPrevMonthValues()">이전 달 값 불러오기</button>
+      <button class="btn btn-primary" onclick="ssSaveData()" style="margin-left:auto;">저장하기</button>
+    </div>
+    <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:13px; text-align:center;">
+      <thead>
+        <tr style="background:var(--bg); border-bottom:1px solid var(--bdr);">
+          <th style="padding:10px; text-align:left; border-right:1px solid var(--bdr);">학교</th>
+          ${Array.from({ length: maxGradeOverall }, (_, i) => `<th style="padding:10px; border-right:1px solid var(--bdr);">${i + 1}학년</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  ssSchools.forEach((school) => {
+    const schoolMonthData = monthData[school.code] || {};
+    html += `<tr style="border-bottom:1px solid var(--bdr);">
+      <td style="padding:10px; text-align:left; border-right:1px solid var(--bdr); font-weight:bold;">${school.name}</td>`;
+    for (let g = 1; g <= maxGradeOverall; g++) {
+      if (g > school.maxGrade) { html += `<td style="padding:10px; border-right:1px solid var(--bdr); color:var(--mut);">-</td>`; continue; }
+      const val = schoolMonthData[g];
+      html += `<td style="padding:6px; border-right:1px solid var(--bdr);">
+        <input type="number" min="0" class="set-input" style="width:60px; text-align:center; padding:4px;" value="${val === undefined ? '' : val}" data-code="${school.code}" data-grade="${g}" onchange="ssUpdateMonthlyValue(this.getAttribute('data-code'), parseInt(this.getAttribute('data-grade'),10), this.value)">
+      </td>`;
+    }
+    html += `</tr>`;
+  });
+
+  html += `</tbody></table></div>`;
+  container.innerHTML = html;
+}
+
+// ── 추이 (학교×월 매트릭스, 행 클릭 시 학년별 상세 펼침) ──────────
+function ssToggleTrendExpand(code) {
+  if (ssTrendExpandedCodes.has(code)) ssTrendExpandedCodes.delete(code);
+  else ssTrendExpandedCodes.add(code);
+  ssRenderTrendTable();
+}
+
+function ssRenderTrendTable() {
+  const container = document.getElementById('ss-trend-container');
+  if (ssSchools.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-title">아직 추가한 학교가 없습니다</div><div class="empty-state-desc">왼쪽에서 학교를 검색해 추가해보세요</div></div>';
+    return;
+  }
+
+  const monthKeys = ssAllMonthKeys(); // 오름차순
+  let html = `<div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:13px; text-align:center;">
+      <thead>
+        <tr style="background:var(--bg); border-bottom:1px solid var(--bdr);">
+          <th style="padding:10px; text-align:left; border-right:1px solid var(--bdr);">학교</th>
+          ${monthKeys.map(k => `<th style="padding:10px; border-right:1px solid var(--bdr);">${k}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  ssSchools.forEach((school) => {
+    const expanded = ssTrendExpandedCodes.has(school.code);
+    html += `<tr style="border-bottom:1px solid var(--bdr); cursor:pointer;" data-code="${school.code}" onclick="ssToggleTrendExpand(this.getAttribute('data-code'))">
+      <td style="padding:10px; text-align:left; border-right:1px solid var(--bdr);">
+        <span style="display:inline-block; width:14px; color:var(--mut);">${expanded ? '▾' : '▸'}</span>
+        <span style="font-weight:bold;">${school.name}</span>
+        <span style="font-size:11px; color:var(--mut);">(${school.type})</span>
+      </td>`;
+
+    let prevPercent = null;
+    monthKeys.forEach((mk) => {
+      const { percent } = ssSchoolMonthPercent(school, mk);
+      const trend = prevPercent === null ? '' : `<div style="font-size:10px; margin-top:2px;">${ssArrowHtml(percent - prevPercent)}</div>`;
+      html += `<td style="padding:10px; border-right:1px solid var(--bdr); ${ssShareTier(percent)}">
+        <div style="font-weight:bold;">${percent.toFixed(1)}%</div>
+        ${trend}
+      </td>`;
+      prevPercent = percent;
+    });
+    html += `</tr>`;
+
+    if (expanded) {
+      for (let g = 1; g <= school.maxGrade; g++) {
+        html += `<tr style="border-bottom:1px solid var(--bdr); background:var(--bg);">
+          <td style="padding:6px 10px 6px 30px; text-align:left; border-right:1px solid var(--bdr); font-size:12px; color:var(--mut);">${g}학년</td>`;
+        monthKeys.forEach((mk) => {
+          const p = ssGradePercent(school, mk, g);
+          html += `<td style="padding:6px; border-right:1px solid var(--bdr); font-size:12px; ${ssShareTier(p)}">${p.toFixed(1)}%</td>`;
+        });
+        html += `</tr>`;
+      }
+    }
+  });
+
+  html += `</tbody></table></div>`;
+  container.innerHTML = html;
+}
+
+// ── 로드/저장 (+ 구버전 데이터 마이그레이션) ────────────────────
+function ssMigrateIfNeeded(parsed) {
+  if (Array.isArray(parsed)) {
+    // 구버전: [{code,name,type,maxGrade,grades:{i:{total,ours}}}]
+    const monthKey = ssCurrentMonthKey();
+    const monthly = {};
+    const schools = parsed.map((s) => {
+      const totalByGrade = {};
+      const ours = {};
+      Object.keys(s.grades || {}).forEach((g) => {
+        totalByGrade[g] = s.grades[g].total || 0;
+        ours[g] = s.grades[g].ours || 0;
+      });
+      monthly[s.code] = ours;
+      return { code: s.code, name: s.name, type: s.type, maxGrade: s.maxGrade, totalByGrade };
+    });
+    return { schools, monthly: { [monthKey]: monthly } };
+  }
+  return { schools: parsed.schools || [], monthly: parsed.monthly || {} };
+}
+
 async function ssInit() {
   ssPopulateSidoSelect();
   try {
@@ -233,10 +474,12 @@ async function ssInit() {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action: 'loadSchoolShare', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId() })
     });
-    
+
     if (json.ok && json.data) {
-      ssSchools = JSON.parse(json.data);
-      ssRenderSchools();
+      const migrated = ssMigrateIfNeeded(JSON.parse(json.data));
+      ssSchools = migrated.schools;
+      ssMonthly = migrated.monthly;
+      ssRenderCompareTable();
     }
   } catch (e) {
     console.error('학교 점유율 로드 실패:', e);
@@ -256,7 +499,7 @@ async function ssSaveData() {
       return;
     }
 
-    const jsonData = JSON.stringify(ssSchools);
+    const jsonData = JSON.stringify({ schools: ssSchools, monthly: ssMonthly });
     const json = await _fetchGasJson(cfg.url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
