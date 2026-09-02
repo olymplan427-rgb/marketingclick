@@ -89,9 +89,12 @@ async function callGeminiOnce(apiKey, model, system, messages, maxTokens, timeou
 // 그냥 멈추는 경우가 있음이 실측으로 확인됨)이 첫 시도에서 예산을 통째로 써버려서 뒤에 있는
 // 폴백 조합(한도가 안 찬 키/모델)을 아예 시도조차 못 하는 문제가 있었다(2026-09-02 실측).
 // 그래서 조합 1개당 타임아웃을 짧게 고정해 여러 조합을 순서대로 실제로 다 시도할 수 있게 한다.
+// 8초로 둔 이유: 1차 모델(품질이 가장 좋은 모델)은 그대로 유지하고 싶어서 순위를 안 바꾸는 대신,
+// 한도초과 조합 하나당 날리는 시간을 최소화해 뒤쪽의 한도 여유 있는 폴백까지 실제로 도달하게 함
+// (15초일 때는 앞의 3개 한도초과 모델만으로 45초를 다 써서 마지막 폴백을 아예 못 써보고 실패했음 — 2026-09-02 실측).
 const GEMINI_BUDGET_MS = 50000; // maxDuration 60초 중 여유 10초를 남김
-const GEMINI_PER_ATTEMPT_TIMEOUT_MS = 15000; // 조합 1개당 최대 대기 — 이 시간 안에 응답 없으면 다음 조합으로
-const GEMINI_MIN_ATTEMPT_MS = 6000; // 이 시간도 못 줄 만큼 예산이 없으면 재시도 포기
+const GEMINI_PER_ATTEMPT_TIMEOUT_MS = 8000; // 조합 1개당 최대 대기 — 이 시간 안에 응답 없으면 다음 조합으로
+const GEMINI_MIN_ATTEMPT_MS = 4000; // 이 시간도 못 줄 만큼 예산이 없으면 재시도 포기
 async function callGemini(apiKeys, models, system, messages, maxTokens) {
   const deadline = Date.now() + GEMINI_BUDGET_MS;
   let lastErr = null;
