@@ -184,15 +184,27 @@ async function adminSaveCreditCost(actionKey) {
 // ── 사용자 관리 ──────────────────────────────────────────────────
 function adminRenderUsers() {
   var body = document.getElementById('admin-user-body');
+  var pendingBanner = document.getElementById('admin-pending-banner');
   if (!body) return;
-  body.innerHTML = adminState.users.map(function(u) {
+  var pendingCount = adminState.users.filter(function(u) { return u.status === '대기'; }).length;
+  if (pendingBanner) {
+    pendingBanner.style.display = pendingCount ? '' : 'none';
+    pendingBanner.textContent = '가입 승인 대기 ' + pendingCount + '건';
+  }
+  // 승인 대기 계정을 맨 위로 정렬 — 관리자가 바로 눈에 띄게.
+  var sorted = adminState.users.slice().sort(function(a, b) {
+    return (a.status === '대기' ? 0 : 1) - (b.status === '대기' ? 0 : 1);
+  });
+  body.innerHTML = sorted.map(function(u) {
     var uid = adminEsc(u.id);
-    return '<tr style="border-bottom:1px solid var(--bdr);">'
-      + '<td style="padding:10px;font-weight:700;">' + uid + '</td>'
+    var isPending = u.status === '대기';
+    return '<tr style="border-bottom:1px solid var(--bdr);' + (isPending ? 'background:var(--acc-light);' : '') + '">'
+      + '<td style="padding:10px;font-weight:700;">' + uid + (isPending ? ' <span class="info-banner-badge" style="background:var(--acc);color:#fff;">승인대기</span>' : '') + '</td>'
       + '<td style="padding:10px;">' + adminEsc(u.name) + (u.academy ? ' · ' + adminEsc(u.academy) : '') + '</td>'
       + '<td style="padding:10px;"><select class="blog-input" id="admin-u-status-' + uid + '">'
         + '<option value="사용"' + (u.status === '사용' ? ' selected' : '') + '>사용</option>'
-        + '<option value="중지"' + (u.status !== '사용' ? ' selected' : '') + '>중지</option>'
+        + '<option value="중지"' + (u.status !== '사용' && u.status !== '대기' ? ' selected' : '') + '>중지</option>'
+        + (isPending ? '<option value="대기" selected>대기</option>' : '')
       + '</select></td>'
       + '<td style="padding:10px;"><select class="blog-input" id="admin-u-role-' + uid + '">'
         + '<option value=""' + (!u.role ? ' selected' : '') + '>일반</option>'
@@ -200,9 +212,22 @@ function adminRenderUsers() {
       + '</select></td>'
       + '<td style="padding:10px;"><input class="blog-input" type="number" min="0" id="admin-u-monthly-' + uid + '" value="' + adminEsc(u.monthly_credit == null ? '' : u.monthly_credit) + '" placeholder="무제한"></td>'
       + '<td style="padding:10px;"><input class="blog-input" type="number" min="0" id="admin-u-remaining-' + uid + '" value="' + adminEsc(u.remaining_credit == null ? '' : u.remaining_credit) + '"></td>'
-      + '<td style="padding:10px;"><button class="btn btn-primary" onclick="adminSaveUser(\'' + uid + '\')">저장</button></td>'
+      + '<td style="padding:10px;white-space:nowrap;">'
+        + (isPending ? '<button class="btn btn-primary" onclick="adminApproveUserRow(\'' + uid + '\')">승인</button> ' : '')
+        + '<button class="btn' + (isPending ? ' btn-outline' : ' btn-primary') + '" onclick="adminSaveUser(\'' + uid + '\')">저장</button>'
+      + '</td>'
     + '</tr>';
   }).join('');
+}
+
+async function adminApproveUserRow(id) {
+  try {
+    await adminApproveUser(id);
+    adminShowError('');
+    await adminInit();
+  } catch (e) {
+    adminShowError(e.message || '승인 실패');
+  }
 }
 
 async function adminSaveUser(id) {

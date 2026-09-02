@@ -43,7 +43,10 @@
       </div>
 
       <div class="tool-section">
-        <div class="sec-title">사용자 관리</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div class="sec-title" style="margin:0;">사용자 관리</div>
+          <span id="admin-pending-banner" class="info-banner-badge" style="background:var(--acc);color:#fff;display:none;"></span>
+        </div>
         <div style="overflow-x:auto;">
           <table style="width:100%;border-collapse:collapse;font-size:13px;">
             <thead>
@@ -54,7 +57,7 @@
                 <th style="padding:10px;width:110px;">역할</th>
                 <th style="padding:10px;width:110px;">월크레딧</th>
                 <th style="padding:10px;width:110px;">잔여크레딧</th>
-                <th style="padding:10px;width:80px;"></th>
+                <th style="padding:10px;width:140px;"></th>
               </tr>
             </thead>
             <tbody id="admin-user-body"></tbody>
