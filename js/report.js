@@ -189,6 +189,7 @@ async function reportGenerate(btn) {
     var topics = parsed.topics || [];
     if (!brands.length && !patterns.length && !topics.length) { alert('정리할 만한 내용을 찾지 못했습니다.'); return; }
 
+    await useCreditCommit('report_generate');
     window._reportItems = items;
     reportRender(region, trend, brands, patterns, insights, topics);
   } catch (e) {

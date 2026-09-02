@@ -322,6 +322,52 @@ async function getModelListForProvider(env, provider) {
 // 같은 부류로 확인됨), 실제 AI 호출만은 Cloudflare가 아닌 Vercel(env.AI_RELAY_URL)로 중계한다.
 // API 키는 여기서 매번 config 테이블에서 조회해 함께 넘길 뿐, Vercel 쪽엔 저장하지 않는다 —
 // "AI 키는 config가 유일한 출처"라는 기존 설계 유지.
+// ── 생성 요청 직렬화(2026-09) ────────────────────────────────────────────
+// 여러 학원이 동시에 "생성" 버튼을 눌러도 Vercel 릴레이/AI API로는 한 번에 하나씩만
+// 나가도록 D1의 gen_lock 행 하나로 뮤텍스를 구현한다(Durable Object 없이 무료 티어로 구현).
+// UPDATE ... WHERE holder IS NULL 조건부 갱신이 원자적이라 두 요청이 동시에 시도해도
+// 하나만 성공한다. 잠금을 오래 쥔 채로 죽은 요청(예: Worker 재시작)에 다른 사용자가
+// 영원히 막히지 않도록, GEN_LOCK_STALE_MS보다 오래된 잠금은 남의 것이어도 새로 뺏어올 수 있게 한다.
+const GEN_LOCK_STALE_MS = 120000; // 이 시간이 지난 잠금은 죽은 것으로 간주하고 뺏어옴
+const GEN_LOCK_POLL_MS = 2000;    // 잠금 재시도 간격
+const GEN_LOCK_MAX_WAIT_MS = 240000; // 최대 4분까지는 화면에 에러 없이 대기(그 이후만 진짜 실패로 처리)
+
+async function tryAcquireGenLock(env, holderId) {
+  const now = Date.now();
+  const res = await env.DB.prepare(
+    'UPDATE gen_lock SET holder = ?, acquired_at = ? WHERE id = 1 AND (holder IS NULL OR acquired_at < ?)'
+  ).bind(holderId, now, now - GEN_LOCK_STALE_MS).run();
+  return (res.meta && res.meta.changes) > 0;
+}
+
+async function releaseGenLock(env, holderId) {
+  await env.DB.prepare('UPDATE gen_lock SET holder = NULL, acquired_at = NULL WHERE id = 1 AND holder = ?').bind(holderId).run();
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// 잠금을 얻을 때까지(또는 최대 대기시간까지) 조용히 기다린다 — 실패해도 사용자에게 바로
+// 에러를 보여주지 않고 뒤에서 계속 재시도하길 원한다는 요구사항(2026-09)에 맞춘 설계.
+async function runWithGenLock(env, task) {
+  const holderId = crypto.randomUUID();
+  const deadline = Date.now() + GEN_LOCK_MAX_WAIT_MS;
+  let acquired = false;
+  while (Date.now() < deadline) {
+    if (await tryAcquireGenLock(env, holderId)) { acquired = true; break; }
+    await sleep(GEN_LOCK_POLL_MS);
+  }
+  if (!acquired) {
+    return { ok: false, error: '지금 다른 요청이 많아 처리가 지연되고 있습니다. 잠시 후 다시 시도해 주세요.' };
+  }
+  try {
+    return await task();
+  } finally {
+    await releaseGenLock(env, holderId);
+  }
+}
+
 async function callAiRelay(env, body) {
   const res = await fetch(env.AI_RELAY_URL, {
     method: 'POST',
@@ -346,12 +392,12 @@ async function claudeProxy(env, payload) {
   if (!apiKey) return { ok: false, error: 'config에 ' + AI_KEY_PROP[provider] + ' 값이 아직 입력되지 않았습니다.' };
   const model = (configRows[AI_KEY_PROP[provider]] || {}).model || AI_DEFAULT_MODEL[provider];
   const models = provider === 'gemini' ? [model, ...(await getModelListForProvider(env, provider)).filter((m) => m !== model)] : [model];
-  return callAiRelay(env, {
+  return runWithGenLock(env, () => callAiRelay(env, {
     provider, apiKey, models,
     system: (payload && payload.system) || '',
     messages: (payload && payload.messages) || [],
     max_tokens: payload && payload.max_tokens
-  });
+  }));
 }
 
 // 뉴스 소재추천/지역 트렌드 리포트 전용, 항상 Gemini만 사용.
@@ -362,12 +408,12 @@ async function geminiProxy(env, payload) {
   const preferred = (row && row.model) || AI_DEFAULT_MODEL.gemini;
   const fallback = await getModelListForProvider(env, 'gemini');
   const models = [preferred, ...fallback.filter((m) => m !== preferred)];
-  const result = await callAiRelay(env, {
+  const result = await runWithGenLock(env, () => callAiRelay(env, {
     provider: 'gemini', apiKey, models,
     system: (payload && payload.system) || '',
     messages: [{ role: 'user', content: (payload && payload.content) || '' }],
     max_tokens: payload && payload.max_tokens
-  });
+  }));
   if (!result.ok) return result;
   return { ok: true, text: result.text, model: result.model };
 }

@@ -452,9 +452,14 @@ async function getCreditQuote(actionKey) {
 }
 
 // 크레딧이 드는 액션을 실행하기 전에 "예상 크레딧 사용 안내" 팝업(#credit-confirm-overlay)을
-// 띄우고, 사용자가 "계속"을 눌러야 실제 useCredit()(차감)까지 진행한다. 무제한 계정은 확인
-// 없이 바로 진행(어차피 차감되지 않음). 취소 시 던지는 Error에 cancelled=true를 표시해두면
-// 호출부 catch에서 "실패"가 아니라 "사용자 취소"임을 구분해 별도 오류 메시지를 띄우지 않을 수 있다.
+// 띄우고, 사용자가 "계속"을 눌러야 다음 단계로 진행한다. 무제한 계정은 확인 없이 바로 진행.
+// 취소 시 던지는 Error에 cancelled=true를 표시해두면 호출부 catch에서 "실패"가 아니라
+// "사용자 취소"임을 구분해 별도 오류 메시지를 띄우지 않을 수 있다.
+//
+// 중요: 여기서는 실제 차감(useCredit)을 하지 않는다 — 예전엔 "계속" 누르는 즉시 차감했는데,
+// 그 뒤 AI 생성이 504 등으로 실패해도 이미 나간 크레딧은 돌아오지 않는 문제가 있었음(2026-09).
+// 그래서 이 함수는 "사용자가 비용에 동의했다"는 확인(quote)만 반환하고, 실제 차감은 호출부가
+// AI 생성이 성공적으로 끝난 뒤에 useCredit(actionKey)를 따로 호출해서 처리한다.
 var _creditConfirmResolve = null;
 function useCreditConfirm(actionKey, label) {
   return new Promise(function(resolve, reject) {
@@ -464,16 +469,10 @@ function useCreditConfirm(actionKey, label) {
         quote = await getCreditQuote(actionKey);
       } catch (e) { reject(e); return; }
 
-      if (quote.unlimited) {
-        try { resolve(await useCredit(actionKey)); } catch (e) { reject(e); }
-        return;
-      }
+      if (quote.unlimited) { resolve(quote); return; }
 
       var overlay = document.getElementById('credit-confirm-overlay');
-      if (!overlay) { // 팝업 DOM이 없으면 안전하게 그냥 진행
-        try { resolve(await useCredit(actionKey)); } catch (e) { reject(e); }
-        return;
-      }
+      if (!overlay) { resolve(quote); return; } // 팝업 DOM이 없으면 안전하게 그냥 진행
 
       var descEl = document.getElementById('credit-confirm-desc');
       var labelEl = document.getElementById('credit-confirm-label');
@@ -494,10 +493,20 @@ function useCreditConfirm(actionKey, label) {
           reject(cancelErr);
           return;
         }
-        useCredit(actionKey).then(resolve, reject);
+        resolve(quote);
       };
     })();
   });
+}
+
+// AI 생성이 실제로 성공한 뒤에만 호출 — 실패/재시도 중에는 절대 호출하지 말 것.
+// 실패해도 사용자 흐름을 막지 않도록(글은 이미 완성됐으니) 에러를 던지지 않고 조용히 로그만 남긴다.
+async function useCreditCommit(actionKey) {
+  try {
+    await useCredit(actionKey);
+  } catch (e) {
+    console.error('크레딧 차감 실패(생성은 이미 완료됨):', actionKey, e && e.message);
+  }
 }
 function creditConfirmProceed() {
   if (_creditConfirmResolve) _creditConfirmResolve(true);
