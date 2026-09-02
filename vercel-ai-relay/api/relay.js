@@ -76,15 +76,22 @@ async function callGeminiOnce(apiKey, model, system, messages, maxTokens, timeou
 // Vercel 함수 실행시간 제한(vercel.json의 maxDuration, Hobby플랜 최대 60초)에 걸리지 않도록
 // 모델 1개당 타임아웃을 두고, 남은 예산이 얼마 안 남으면 더 이상 폴백을 시도하지 않고 바로 반환한다
 // (전부 시도하다 60초를 넘겨 Vercel에 강제 종료당하면 클라이언트엔 아무 응답도 못 주고 524만 뜬다 — 2026-09-01 실측).
+//
+// 모델 1개당 타임아웃을 "남은 예산 전부"로 주면, 일일 한도가 찬 모델(정상 429가 아니라 응답 없이
+// 그냥 멈추는 경우가 있음이 실측으로 확인됨)이 첫 시도에서 예산을 통째로 써버려서 뒤에 있는
+// 폴백 모델(예: 한도가 안 찬 -flash-lite)을 아예 시도조차 못 하는 문제가 있었다(2026-09-02 실측).
+// 그래서 모델 1개당 타임아웃을 짧게 고정해 여러 모델을 순서대로 실제로 다 시도할 수 있게 한다.
 const GEMINI_BUDGET_MS = 50000; // maxDuration 60초 중 여유 10초를 남김
-const GEMINI_MIN_ATTEMPT_MS = 15000; // 이 시간도 못 줄 만큼 예산이 없으면 재시도 포기
+const GEMINI_PER_MODEL_TIMEOUT_MS = 15000; // 모델 1개당 최대 대기 — 이 시간 안에 응답 없으면 다음 모델로
+const GEMINI_MIN_ATTEMPT_MS = 6000; // 이 시간도 못 줄 만큼 예산이 없으면 재시도 포기
 async function callGemini(apiKey, models, system, messages, maxTokens) {
   const deadline = Date.now() + GEMINI_BUDGET_MS;
   let lastErr = null;
   for (const model of models) {
     const remaining = deadline - Date.now();
     if (remaining < GEMINI_MIN_ATTEMPT_MS) break;
-    const r = await callGeminiOnce(apiKey, model, system, messages, maxTokens, remaining);
+    const timeout = Math.min(remaining, GEMINI_PER_MODEL_TIMEOUT_MS);
+    const r = await callGeminiOnce(apiKey, model, system, messages, maxTokens, timeout);
     if (r.ok) return { ok: true, data: { content: [{ text: r.text }] }, text: r.text, model };
     lastErr = r.error;
   }
