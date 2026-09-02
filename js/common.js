@@ -318,17 +318,28 @@ async function registerSubmit() {
       body: JSON.stringify({ action: 'register', token: cfg.token, userId: id, userPw: pw, name: name, academy: academy, site: _siteId() })
     });
     if (!json.ok) { if (errEl) { errEl.textContent = json.error || '가입 실패'; errEl.style.display = 'block'; } return; }
-    // 2026-09-02부터 가입 즉시 로그인시키지 않음 — 관리자 승인 전까지는 계정이 비활성 상태.
-    setLoginOverlayMode('login');
-    var loginIdEl = document.getElementById('login-id');
-    if (loginIdEl) loginIdEl.value = id;
-    var loginErrEl = document.getElementById('login-error');
-    if (loginErrEl) {
-      loginErrEl.textContent = '가입 신청이 완료되었습니다. 관리자 승인 후 로그인할 수 있어요.';
-      loginErrEl.className = 'blog-alert err show';
-      loginErrEl.style.display = 'block';
-      loginErrEl.style.color = '#16a34a';
+    // 관리자 승인이 필요한 가입(REQUIRE_SIGNUP_APPROVAL=true일 때)만 대기 안내 후 로그인 화면으로.
+    // 현재는 서버가 즉시 승인하므로(REQUIRE_SIGNUP_APPROVAL=false) json.pending이 안 와서 바로 로그인됨.
+    if (json.pending) {
+      setLoginOverlayMode('login');
+      var loginIdEl = document.getElementById('login-id');
+      if (loginIdEl) loginIdEl.value = id;
+      var loginErrEl = document.getElementById('login-error');
+      if (loginErrEl) {
+        loginErrEl.textContent = '가입 신청이 완료되었습니다. 관리자 승인 후 로그인할 수 있어요.';
+        loginErrEl.className = 'blog-alert err show';
+        loginErrEl.style.display = 'block';
+        loginErrEl.style.color = '#16a34a';
+      }
+      return;
     }
+    localStorage.setItem(_authKey('user_id'), id);
+    localStorage.setItem(_authKey('user_pw'), pw);
+    localStorage.setItem(_authKey('user_name'), name);
+    localStorage.setItem(_authKey('user_academy'), academy);
+    localStorage.setItem(_authKey('user_role'), '');
+    localStorage.setItem(_authKey('last_active'), String(Date.now()));
+    hideLoginOverlay();
   } catch(e) {
     if (errEl) { errEl.textContent = '연결 오류: ' + e.message; errEl.style.display = 'block'; }
   } finally {

@@ -74,18 +74,30 @@ async function findUser(env, id) {
 
 const SIGNUP_CREDIT = 500;
 
-// 2026-09-02: 가입 즉시 활성화하던 것을 관리자 승인제로 변경 — status='대기'로 생성되고,
-// 크레딧은 승인 시점(adminApproveUser)에 지급. 가입 시 관리자에게 이메일로 알림.
+// 2026-09-02: 관리자 승인제 기능은 구현해뒀지만(adminApproveUser 등) 당장은 끄고 즉시 가입 승인으로
+// 되돌림 — false로 두면 예전처럼 가입 즉시 status='사용' + 크레딧 지급. 다시 켜려면 true로만 바꾸면 됨.
+const REQUIRE_SIGNUP_APPROVAL = false;
+
 async function registerUser(env, id, password, name, academy, site) {
   if (!id || !password || !name || !academy) return { ok: false, error: '모든 항목을 입력하세요.' };
   if (site === 'dev') return { ok: false, error: '이 주소는 개발용입니다. 정식 주소에서 가입해주세요.' };
   const existing = await findUser(env, id);
   if (existing) return { ok: false, error: '이미 사용 중인 아이디입니다.' };
+
+  if (REQUIRE_SIGNUP_APPROVAL) {
+    await env.DB.prepare(
+      'INSERT INTO users (id,password,name,academy,status,role,monthly_credit,remaining_credit,credit_reset_month) VALUES (?,?,?,?,?,?,?,?,?)'
+    ).bind(id, password, name, academy, '대기', '', null, null, null).run();
+    await notifyAdminOfSignup(env, id, name, academy).catch((e) => console.error('가입 알림 메일 실패', e.message));
+    return { ok: true, pending: true };
+  }
+
+  const currentMonth = monthKST();
   await env.DB.prepare(
     'INSERT INTO users (id,password,name,academy,status,role,monthly_credit,remaining_credit,credit_reset_month) VALUES (?,?,?,?,?,?,?,?,?)'
-  ).bind(id, password, name, academy, '대기', '', null, null, null).run();
-  await notifyAdminOfSignup(env, id, name, academy).catch((e) => console.error('가입 알림 메일 실패', e.message));
-  return { ok: true, pending: true };
+  ).bind(id, password, name, academy, '사용', '', SIGNUP_CREDIT, SIGNUP_CREDIT, currentMonth).run();
+  await logCreditEvent(env, id, '충전', '신규 가입 지급', SIGNUP_CREDIT, SIGNUP_CREDIT);
+  return { ok: true };
 }
 
 async function notifyAdminOfSignup(env, id, name, academy) {
