@@ -30,6 +30,8 @@ function ssNextMonthKey(key) {
 function ssAllMonthKeys() {
   const keys = new Set(Object.keys(ssMonthly));
   keys.add(ssCurrentMonthKey());
+  if (ssCompareMonth) keys.add(ssCompareMonth); // ‹›로 데이터 없는 달까지 넘어가도 드롭다운에 계속 표시되게
+  if (ssInputMonth) keys.add(ssInputMonth);
   return Array.from(keys).sort();
 }
 
@@ -237,8 +239,11 @@ function ssRenderCompareTable() {
         ${monthKeys.map(k => `<option value="${k}" ${k === ssCompareMonth ? 'selected' : ''}>${k}</option>`).join('')}
       </select>
       <button class="btn" style="padding:4px 10px;" onclick="ssOnCompareMonthChange('${ssNextMonthKey(ssCompareMonth)}')">›</button>
-      <span style="font-size:12px; color:var(--mut);">해당 월 우리 학원생 수는 "월별 입력" 탭에서 등록</span>
+      <span style="font-size:12px; color:var(--mut);">해당 월 우리 학원생 수는 "재원생입력" 탭에서 등록</span>
     </div>
+    ${!ssMonthly[ssCompareMonth] ? `<div style="background:var(--acc-light); border:1px solid var(--acc-border); border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:13px;">
+      <b>${ssCompareMonth}</b>에는 아직 입력된 재원생 데이터가 없어 전부 0%로 표시됩니다 — "재원생입력" 탭에서 등록해주세요.
+    </div>` : ''}
     <div style="overflow-x:auto;">
     <table style="width:100%; border-collapse:collapse; font-size:13px; text-align:center;">
       <thead>
