@@ -184,10 +184,12 @@ function ssRemoveSchool(code) {
 // ── 비교 통표 ───────────────────────────────────────────────────
 // 진한 단색 채우기 대신 옅은 톤 3단계로만 구분 — 표 전체가 너무 진해서 오히려
 // 안 읽히는 문제(2026-09-03 피드백) 때문에 글자색은 항상 기본(어두운) 색 유지.
+// 하드코딩 색 대신 color-mix로 var(--acc) 자체를 옅게 섞어 써서, 나중에 테마
+// 액센트 색이 또 바뀌어도(예전 청록→보라 전환처럼) 이 파일을 안 고쳐도 자동으로 맞음.
 function ssShareTier(percent) {
-  if (percent >= 20) return 'background:#dcd5f5;';
-  if (percent >= 10) return 'background:#ece7fa;';
-  if (percent > 0) return 'background:#f6f4fc;';
+  if (percent >= 20) return 'background:color-mix(in srgb, var(--acc) 28%, white);';
+  if (percent >= 10) return 'background:color-mix(in srgb, var(--acc) 16%, white);';
+  if (percent > 0) return 'background:color-mix(in srgb, var(--acc) 8%, white);';
   return '';
 }
 
