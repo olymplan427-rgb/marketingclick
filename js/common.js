@@ -20,7 +20,18 @@ function switchPage(num) {
 }
 
 
+// 유효한 showPage() id 목록 — URL(?page=) 복원 시 화이트리스트로 사용(잘못된 값은 홈으로).
+var VALID_PAGE_IDS = ['home', 'list', 'free', 'blog', 'blog-history', 'blog-news', 'settings-prompt', 'settings-instagram', 'monitor', 'mapsearch', 'report', 'schoolshare', 'credit', 'feedback', 'guide', 'admin'];
+
+// 메뉴 이동 시 호출하는 진입점 — 화면 전환(_applyPage) + URL(?page=) 동기화를 함께 처리.
+// 블로그 작성/이미지 만들기 내부의 세부 스텝(Step1~3 등)은 URL에 반영하지 않음(의도적 — showPage를 안 거침).
 function showPage(id) {
+  _applyPage(id);
+  _syncUrlToPage(id);
+}
+
+// popstate(뒤로/앞으로가기)나 최초 로드 시 — 화면만 전환하고 URL은 이미 맞으므로 다시 push하지 않음.
+function _applyPage(id) {
   document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
   document.querySelectorAll('.sidebar-item').forEach(function(i) { i.classList.remove('active'); });
   // 설정 서브메뉴는 설정 계열이 아닐 때 닫기
@@ -139,6 +150,28 @@ function showPage(id) {
     if (navAd) navAd.classList.add('active');
     if (typeof adminInit === 'function') adminInit();
   }
+}
+
+// ── URL(?page=) 동기화 ───────────────────────────────────────────
+function _syncUrlToPage(id) {
+  var urlId = (id === 2) ? 'list' : id;
+  var url = new URL(location.href);
+  if (urlId === 'home') url.searchParams.delete('page');
+  else url.searchParams.set('page', urlId);
+  if (url.href !== location.href) history.pushState({ pageId: urlId }, '', url);
+}
+
+// 뒤로/앞으로가기 — URL은 이미 브라우저가 바꿔놓은 상태이므로 화면만 맞춰준다(다시 push 안 함).
+window.addEventListener('popstate', function() {
+  var pageId = new URLSearchParams(location.search).get('page') || 'home';
+  if (VALID_PAGE_IDS.indexOf(pageId) === -1) pageId = 'home';
+  _applyPage(pageId);
+});
+
+// 최초 로드 시 URL의 ?page= 값으로 시작 화면을 결정(로그인 여부와 무관하게 로그인 후 반영됨).
+function _initialPageIdFromUrl() {
+  var pageId = new URLSearchParams(location.search).get('page') || 'home';
+  return VALID_PAGE_IDS.indexOf(pageId) === -1 ? 'home' : pageId;
 }
 
 function toggleCollapse(contentId, btnId) {
@@ -918,4 +951,4 @@ function _igUpdateStatus() {
 
 applyFeatureFlags();
 initLoginGate();
-showPage('home'); // 로그인 후 첫 화면을 홈으로 (index.html/pages의 기본 active 상태와 맞춤)
+_applyPage(_initialPageIdFromUrl()); // 로그인 후 첫 화면 — URL의 ?page= 값이 있으면 그 화면, 없으면 홈
