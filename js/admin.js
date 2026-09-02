@@ -96,7 +96,7 @@ function adminRenderAiList() {
     if (k.provider === 'gemini') {
       var fallbackList = (models.gemini || []).join('\n');
       fallbackBlock = '<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--bdr);">'
-        + '<div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:4px;">순차 폴백 우선순위 (한 줄에 모델 하나, 위에서부터 순서대로 시도 — 한도초과/실패 시 다음 줄로 자동 전환)</div>'
+        + '<div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:4px;">순차 폴백 우선순위 (한 줄에 모델 하나, 위에서부터 순서대로 시도 — 한도초과/실패 시 다음 줄로 자동 전환). 위 API 키에 쉼표로 여러 키를 넣으면 모델 하나당 그 키들도 순서대로 다 시도한 뒤 다음 모델로 넘어감(예: 3.7×키A→3.7×키B→3.6×키A→...)</div>'
         + '<textarea class="blog-input" id="admin-fallback-' + k.provider + '" rows="4" style="width:100%;font-family:monospace;font-size:12px;">' + adminEsc(fallbackList) + '</textarea>'
         + '<button class="btn" style="margin-top:6px;" onclick="adminSaveFallback(\'' + k.provider + '\')">폴백 순서 저장</button>'
       + '</div>';
@@ -107,7 +107,7 @@ function adminRenderAiList() {
         + '<div style="font-size:11px;color:' + (k.hasValue ? '#16a34a' : 'var(--mut)') + ';font-weight:700;">' + (k.hasValue ? '키 설정됨' : '키 없음') + '</div>'
       + '</div>'
       + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
-        + '<input class="blog-input" style="flex:1;min-width:220px;" id="admin-key-' + k.provider + '" placeholder="' + (k.hasValue ? '변경하려면 새 키 입력 (' + adminEsc(k.maskedValue) + ')' : 'API 키 입력') + '">'
+        + '<input class="blog-input" style="flex:1;min-width:220px;" id="admin-key-' + k.provider + '" placeholder="' + (k.hasValue ? '변경하려면 새 키 입력 (' + adminEsc(k.maskedValue) + ')' : (k.provider === 'gemini' ? 'API 키 입력 (쉼표로 여러 개 가능: 키A,키B)' : 'API 키 입력')) + '">'
         + '<select class="blog-input" style="width:220px;" id="admin-model-' + k.provider + '">' + modelOptions + '</select>'
         + '<button class="btn btn-primary" onclick="adminSaveAiRow(\'' + k.provider + '\',\'' + k.key + '\')">저장</button>'
       + '</div>'
