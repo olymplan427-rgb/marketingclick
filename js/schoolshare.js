@@ -182,10 +182,12 @@ function ssRemoveSchool(code) {
 }
 
 // ── 비교 통표 ───────────────────────────────────────────────────
+// 진한 단색 채우기 대신 옅은 톤 3단계로만 구분 — 표 전체가 너무 진해서 오히려
+// 안 읽히는 문제(2026-09-03 피드백) 때문에 글자색은 항상 기본(어두운) 색 유지.
 function ssShareTier(percent) {
-  if (percent >= 20) return 'background:var(--acc); color:#fff;';
-  if (percent >= 10) return 'background:var(--acc-border);';
-  if (percent > 0) return 'background:var(--acc-light);';
+  if (percent >= 20) return 'background:#dcd5f5;';
+  if (percent >= 10) return 'background:#ece7fa;';
+  if (percent > 0) return 'background:#f6f4fc;';
   return '';
 }
 
