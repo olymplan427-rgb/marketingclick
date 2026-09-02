@@ -110,11 +110,33 @@ function blogSwitchTab(tab) {
   if (ib) { ib.style.cssText = !isPost ? 'background:var(--acc);color:#fff;border-color:var(--acc);' : ''; }
 }
 
+function blogSleep(ms) {
+  return new Promise(function(resolve) { setTimeout(resolve, ms); });
+}
+
+// 504(릴레이 타임아웃)·일시적 서버 오류는 대부분 재시도하면 풀리는 것으로 확인됨(2026-09) —
+// 화면에 "다시 시도해주세요" 문구를 바로 보여주지 말고, 백그라운드에서 조용히 여러 번
+// 재시도한 뒤 그래도 안 되면 그때만 에러를 던진다. 사용자는 그동안 기존 "생성중..." 버튼
+// 문구만 계속 보게 된다.
 async function blogCallClaude(systemPrompt, userContent, maxTokens) {
-  var data = await claudeProxyCall({ model: getModel('claude'), max_tokens: maxTokens || 2048, system: systemPrompt, messages: [{ role: 'user', content: userContent }] });
-  var text = data && data.content && data.content[0] && data.content[0].text;
-  if (!text) throw new Error('AI로부터 빈 응답을 받았습니다. 다시 시도해 주세요.');
-  return text;
+  var maxAttempts = 4;
+  var delay = 4000;
+  var lastErr;
+  for (var attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      var data = await claudeProxyCall({ model: getModel('claude'), max_tokens: maxTokens || 2048, system: systemPrompt, messages: [{ role: 'user', content: userContent }] });
+      var text = data && data.content && data.content[0] && data.content[0].text;
+      if (!text) throw new Error('AI로부터 빈 응답을 받았습니다.');
+      return text;
+    } catch (e) {
+      lastErr = e;
+      if (attempt < maxAttempts - 1) {
+        await blogSleep(delay);
+        delay = Math.min(delay * 2, 20000);
+      }
+    }
+  }
+  throw new Error((lastErr && lastErr.message) || '생성에 실패했습니다. 잠시 후 다시 시도해 주세요.');
 }
 
 async function blogCall(systemPrompt, userContent, maxTokens) {
