@@ -816,10 +816,6 @@ async function blogHistoryInit() {
   try {
     var posts = await gasGetMyPosts(100);
     blogState.historyPosts = posts || [];
-    if (!blogState.historyPosts.length && alertEl) {
-      alertEl.textContent = '저장된 글이 없거나 구글 시트 연동이 설정되지 않았습니다. 설정 페이지에서 확인해주세요.';
-      alertEl.className = 'blog-alert err show';
-    }
     blogRenderHistoryList();
   } catch(e) {
     blogState.historyPosts = [];
