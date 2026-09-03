@@ -139,40 +139,73 @@ function newsRenderDebug(debug) {
   ].join('');
 }
 
-// 카드 하나에 제목/키워드/이유/출처/"이 주제로 쓰기" 버튼을 전부 담아 렌더링(목록+상세 분리 없음).
+// 제목 한 줄짜리 압축 리스트로만 표시 — 클릭하면 newsTopicModalOpen이 상세(키워드/이유/출처/버튼)를 모달로 띄움.
 function newsRenderTopicSuggestions(topics) {
   window._newsTopicSuggestions = topics;
   var resultEl = document.getElementById('news-result');
   if (!resultEl) return;
 
-  var newsRaw = window._newsRaw || [];
-  var cards = topics.map(function(t, i) {
-    var sources = (t.sourceIds || []).map(function(id) {
+  var rows = topics.map(function(t, i) {
+    return '<div class="news-topic-row" onclick="newsTopicModalOpen(\'news\',' + i + ')">'
+      + (t.blogType ? '<span style="background:var(--acc-light);color:var(--acc);font-size:10px;padding:2px 8px;border-radius:99px;font-weight:600;flex-shrink:0;">' + newsEsc(t.blogType) + '</span>' : '')
+      + '<span class="news-topic-row-title">' + newsEsc(t.title || '') + '</span>'
+      + '</div>';
+  }).join('');
+
+  resultEl.innerHTML = '<h3 style="font-size:14px;font-weight:700;margin:0 0 10px;">추천 주제 (' + topics.length + '건)</h3>' + rows;
+}
+
+// ── 뉴스/지역 트렌드 공용 상세 모달 ──────────────────────────────────────
+function newsTopicModalOpen(kind, idx) {
+  var list = kind === 'news' ? (window._newsTopicSuggestions || []) : (window._regionTopics || []);
+  var t = list[idx];
+  if (!t) return;
+
+  var sources;
+  if (kind === 'news') {
+    var newsRaw = window._newsRaw || [];
+    sources = (t.sourceIds || []).map(function(id) {
       var src = newsRaw[id];
       if (!src) return '';
       var desc = (src.description || '').replace(/</g, '&lt;');
       if (desc.length > 90) desc = desc.slice(0, 90) + '…';
-      return [
-        '<div style="margin-top:8px;">',
-          '<a href="' + (src.link || '').replace(/"/g, '&quot;') + '" target="_blank" rel="noopener" style="font-size:12px;color:var(--acc);text-decoration:underline;font-weight:600;">· ' + newsEsc(src.title || '') + '</a>',
-          (desc ? '<div style="font-size:11px;color:var(--mut);line-height:1.5;margin:2px 0 0 10px;">' + desc + '</div>' : ''),
-        '</div>'
-      ].join('');
+      return '<div style="margin-top:8px;"><a href="' + (src.link || '').replace(/"/g, '&quot;') + '" target="_blank" rel="noopener" style="font-size:12px;color:var(--acc);text-decoration:underline;font-weight:600;">· ' + newsEsc(src.title || '') + '</a>'
+        + (desc ? '<div style="font-size:11px;color:var(--mut);line-height:1.5;margin:2px 0 0 10px;">' + desc + '</div>' : '') + '</div>';
     }).join('');
+  } else {
+    var rawItems = window._regionTopicItems || [];
+    sources = (t.sourceIndexes || []).map(function(idx2) {
+      var src = rawItems[idx2];
+      if (!src) return '';
+      var desc = (src.description || '').replace(/</g, '&lt;');
+      if (desc.length > 90) desc = desc.slice(0, 90) + '…';
+      return '<div style="margin-top:8px;"><a href="' + (src.link || '').replace(/"/g, '&quot;') + '" target="_blank" rel="noopener" style="font-size:12px;color:var(--acc);text-decoration:underline;font-weight:600;">· ' + newsEsc(src.title || '') + '</a>'
+        + (desc ? '<div style="font-size:11px;color:var(--mut);line-height:1.5;margin:2px 0 0 10px;">' + desc + '</div>' : '') + '</div>';
+    }).join('');
+  }
 
-    return [
-      '<div class="blog-card" style="margin-bottom:10px;">',
-        (t.blogType ? '<span style="background:var(--acc-light);color:var(--acc);font-size:11px;padding:2px 8px;border-radius:99px;font-weight:600;">' + newsEsc(t.blogType) + '</span>' : ''),
-        '<div style="font-size:16px;font-weight:700;color:var(--txt);margin:8px 0 6px;">' + newsEsc(t.title || '') + '</div>',
-        '<div style="font-size:12px;color:var(--mut);margin-bottom:10px;">' + newsEsc(t.keywords || '') + '</div>',
-        '<div style="font-size:13px;color:var(--txt);line-height:1.6;margin-bottom:10px;">' + newsEsc(t.reason || '') + '</div>',
-        (sources ? '<div style="font-size:11px;font-weight:700;color:var(--mut);margin-top:12px;padding-top:10px;border-top:1px solid var(--bdr);">참고 기사</div>' + sources : ''),
-        '<button class="btn btn-primary" style="margin-top:14px;width:100%;" onclick="newsUseTopicSuggestion(' + i + ')">이 주제로 쓰기</button>',
-      '</div>'
+  var titleEl = document.getElementById('news-topic-modal-title');
+  if (titleEl) titleEl.textContent = t.blogType || '주제 상세';
+
+  var useFn = kind === 'news' ? 'newsUseTopicSuggestion' : 'regionTopicsUseSuggestion';
+  var bodyEl = document.getElementById('news-topic-modal-body');
+  if (bodyEl) {
+    bodyEl.innerHTML = [
+      '<div style="font-size:16px;font-weight:700;color:var(--txt);margin-bottom:8px;">' + newsEsc(t.title || '') + '</div>',
+      '<div style="font-size:12px;color:var(--mut);margin-bottom:10px;">' + newsEsc(t.keywords || '') + '</div>',
+      '<div style="font-size:13px;color:var(--txt);line-height:1.6;margin-bottom:10px;">' + newsEsc(t.reason || '') + '</div>',
+      (sources ? '<div style="font-size:11px;font-weight:700;color:var(--mut);margin-top:12px;padding-top:10px;border-top:1px solid var(--bdr);">참고 글</div>' + sources : ''),
+      '<button class="btn btn-primary" style="margin-top:14px;width:100%;" onclick="' + useFn + '(' + idx + ')">이 주제로 쓰기</button>'
     ].join('');
-  }).join('');
+  }
 
-  resultEl.innerHTML = '<h3 style="font-size:15px;font-weight:700;margin:0 0 12px;">추천 주제 (' + topics.length + '건)</h3>' + cards;
+  var overlay = document.getElementById('news-topic-modal');
+  if (overlay) overlay.style.display = 'flex';
+}
+
+function newsTopicModalClose() {
+  var overlay = document.getElementById('news-topic-modal');
+  if (overlay) overlay.style.display = 'none';
 }
 
 function newsUseTopicSuggestion(idx) {
@@ -193,6 +226,7 @@ function newsUseTopicSuggestion(idx) {
   var links = (t.sourceIds || []).map(function(id) { return newsRaw[id] && newsRaw[id].link; }).filter(Boolean);
   setVal('blog-ref-url', links.join('\n'));
 
+  newsTopicModalClose();
   showPage('blog');
   showToast('주제가 채워졌습니다');
 }
@@ -298,39 +332,20 @@ async function regionTopicsGenerate(btn) {
 }
 
 // 카드 하나에 제목/키워드/이유/출처/"이 주제로 쓰기" 버튼을 전부 담아 렌더링(목록+상세 분리 없음).
+// 제목 한 줄짜리 압축 리스트로만 표시 — 클릭하면 newsTopicModalOpen이 상세를 모달로 띄움.
 function regionTopicsRender(topics) {
   window._regionTopics = topics;
   var resultEl = document.getElementById('region-topic-result');
   if (!resultEl) return;
 
-  var rawItems = window._regionTopicItems || [];
-  var cards = topics.map(function(t, i) {
-    var sources = (t.sourceIndexes || []).map(function(idx2) {
-      var src = rawItems[idx2];
-      if (!src) return '';
-      var desc = (src.description || '').replace(/</g, '&lt;');
-      if (desc.length > 90) desc = desc.slice(0, 90) + '…';
-      return [
-        '<div style="margin-top:8px;">',
-          '<a href="' + (src.link || '').replace(/"/g, '&quot;') + '" target="_blank" rel="noopener" style="font-size:12px;color:var(--acc);text-decoration:underline;font-weight:600;">· ' + newsEsc(src.title || '') + '</a>',
-          (desc ? '<div style="font-size:11px;color:var(--mut);line-height:1.5;margin:2px 0 0 10px;">' + desc + '</div>' : ''),
-        '</div>'
-      ].join('');
-    }).join('');
-
-    return [
-      '<div class="blog-card" style="margin-bottom:10px;">',
-        (t.blogType ? '<span style="background:var(--acc-light);color:var(--acc);font-size:11px;padding:2px 8px;border-radius:99px;font-weight:600;">' + newsEsc(t.blogType) + '</span>' : ''),
-        '<div style="font-size:16px;font-weight:700;color:var(--txt);margin:8px 0 6px;">' + newsEsc(t.title || '') + '</div>',
-        '<div style="font-size:12px;color:var(--mut);margin-bottom:10px;">' + newsEsc(t.keywords || '') + '</div>',
-        '<div style="font-size:13px;color:var(--txt);line-height:1.6;margin-bottom:10px;">' + newsEsc(t.reason || '') + '</div>',
-        (sources ? '<div style="font-size:11px;font-weight:700;color:var(--mut);margin-top:12px;padding-top:10px;border-top:1px solid var(--bdr);">참고 글</div>' + sources : ''),
-        '<button class="btn btn-primary" style="margin-top:14px;width:100%;" onclick="regionTopicsUseSuggestion(' + i + ')">이 주제로 쓰기</button>',
-      '</div>'
-    ].join('');
+  var rows = topics.map(function(t, i) {
+    return '<div class="news-topic-row" onclick="newsTopicModalOpen(\'region\',' + i + ')">'
+      + (t.blogType ? '<span style="background:var(--acc-light);color:var(--acc);font-size:10px;padding:2px 8px;border-radius:99px;font-weight:600;flex-shrink:0;">' + newsEsc(t.blogType) + '</span>' : '')
+      + '<span class="news-topic-row-title">' + newsEsc(t.title || '') + '</span>'
+      + '</div>';
   }).join('');
 
-  resultEl.innerHTML = '<h3 style="font-size:15px;font-weight:700;margin:0 0 12px;">추천 주제 (' + topics.length + '건)</h3>' + cards;
+  resultEl.innerHTML = '<h3 style="font-size:14px;font-weight:700;margin:0 0 10px;">추천 주제 (' + topics.length + '건)</h3>' + rows;
 }
 
 function regionTopicsUseSuggestion(idx) {
@@ -351,6 +366,7 @@ function regionTopicsUseSuggestion(idx) {
   var links = (t.sourceIndexes || []).map(function(idx2) { return rawItems[idx2] && rawItems[idx2].link; }).filter(Boolean);
   setVal('blog-ref-url', links.join('\n'));
 
+  newsTopicModalClose();
   showPage('blog');
   showToast('주제가 채워졌습니다');
 }
