@@ -264,9 +264,15 @@ canvas{display:block;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.15);cu
    되돌리고 자체 스크롤만 준다(2026-09-03).*/
 #blogtab-news{display:block;overflow-y:auto;overflow-x:hidden;}
 .news-source-scroll{padding:16px 24px 24px;}
-.news-source-columns{display:flex;gap:20px;align-items:flex-start;}
-.news-source-col{flex:1;min-width:0;}
+.news-source-columns{display:flex;gap:20px;align-items:stretch;}
+.news-source-col{flex:1;min-width:0;display:flex;flex-direction:column;}
 @media (max-width:560px){.news-source-columns{flex-direction:column;}}
+.news-source-head{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--txt);margin-bottom:12px;min-height:20px;}
+.news-source-head-icon{flex-shrink:0;width:18px;height:18px;color:var(--acc);}
+.news-source-head-icon svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.news-topic-row{display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--bdr);border-radius:10px;background:#fff;margin-bottom:6px;cursor:pointer;transition:border-color .12s;}
+.news-topic-row:hover{border-color:var(--acc);}
+.news-topic-row-title{font-size:13px;font-weight:600;color:var(--txt);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .mon-main{display:flex;flex:1;overflow:hidden;}
 .mon-left{width:390px;border-right:1px solid #e4e6e9;display:flex;flex-direction:column;background:#fff;overflow:hidden;flex-shrink:0;}
 .mon-left-header{padding:14px 24px 10px;border-bottom:1px solid #e4e6e9;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
