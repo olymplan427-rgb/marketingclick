@@ -39,20 +39,11 @@ function _applyPage(id) {
     var subnav = document.getElementById('sidebar-subnav-settings');
     if (subnav) subnav.style.display = 'none';
   }
-  // 이미지 스튜디오 서브메뉴는 하위 항목이 하나뿐이라 접지 않고 항상 펼쳐둠(2026-09-04) —
-  // 다른 페이지로 이동해도 active 표시만 지운다.
-  if (id !== 'list' && id !== 2 && id !== 'free') {
-    document.querySelectorAll('#sidebar-subnav-image .sidebar-subitem').forEach(function(i) { i.classList.remove('active'); });
-  }
+  // 이미지 스튜디오는 하위 항목이 하나뿐이라 서브메뉴 없이 단일 사이드바 항목으로 통합(2026-09-04).
   if (id === 'list' || id === 2) {
     document.getElementById('page-2').classList.add('active');
     var navGroup = document.getElementById('nav-image-group');
     if (navGroup) navGroup.classList.add('active');
-    var imgSubnavOpen = document.getElementById('sidebar-subnav-image');
-    if (imgSubnavOpen) imgSubnavOpen.style.display = '';
-    document.querySelectorAll('#sidebar-subnav-image .sidebar-subitem').forEach(function(i) { i.classList.remove('active'); });
-    var nav = document.getElementById('nav-list');
-    if (nav) nav.classList.add('active');
     var lp = document.querySelector('#page-2 .left-panel');
     if (lp) { lp.classList.remove('mode-free'); lp.classList.add('mode-list'); }
     p2State.templateKey = 'list';
@@ -61,11 +52,6 @@ function _applyPage(id) {
     document.getElementById('page-2').classList.add('active');
     var navGroup = document.getElementById('nav-image-group');
     if (navGroup) navGroup.classList.add('active');
-    var imgSubnavOpen = document.getElementById('sidebar-subnav-image');
-    if (imgSubnavOpen) imgSubnavOpen.style.display = '';
-    document.querySelectorAll('#sidebar-subnav-image .sidebar-subitem').forEach(function(i) { i.classList.remove('active'); });
-    var nav = document.getElementById('nav-free');
-    if (nav) nav.classList.add('active');
     var lp = document.querySelector('#page-2 .left-panel');
     if (lp) { lp.classList.remove('mode-list'); lp.classList.add('mode-free'); }
     p2State.templateKey = 'free';
