@@ -134,7 +134,9 @@
         </label>
         <div id="login-error" style="display:none;color:#ef4444;font-size:12px;margin-top:8px;"></div>
         <button id="login-submit" class="btn btn-primary" style="width:100%;margin-top:16px;" onclick="loginOverlaySubmit()">로그인</button>
-        <div style="text-align:center;margin-top:14px;font-size:12px;color:var(--mut);">
+        <!-- 2026-09-04: 아이디를 관리자가 사전에 부여하는 방식으로 전환 — 회원가입 진입 링크를 숨김.
+             기능 자체(setLoginOverlayMode('register') 등)는 삭제하지 않고 그대로 남겨둠. -->
+        <div style="text-align:center;margin-top:14px;font-size:12px;color:var(--mut);display:none;">
           <span id="login-toggle-to-register">계정이 없으신가요? <a href="javascript:void(0)" onclick="setLoginOverlayMode('register')" style="color:var(--acc);font-weight:700;">회원가입</a></span>
           <span id="login-toggle-to-login" style="display:none;">이미 계정이 있으신가요? <a href="javascript:void(0)" onclick="setLoginOverlayMode('login')" style="color:var(--acc);font-weight:700;">로그인</a></span>
         </div>
