@@ -9,7 +9,7 @@ function homeEsc(s) {
 // { page, title, desc, flag, icon } — flag가 있고 FEATURE_FLAGS[flag]===false면 "준비중"으로 비활성 표시.
 var HOME_FEATURE_CARDS = [
   { page: 'blog', flag: null, title: 'AI 글작성', desc: '주제와 키워드만 입력하면 완성 글까지 한 번에', icon: '<path d="M4 20l4-1 10-10-3-3L5 16l-1 4z"/><path d="M14 7l3 3"/>' },
-  { page: 'blog-news', flag: null, title: 'AI 소재추천', desc: '최근 교육 뉴스로 블로그 소재를 찾아드려요', icon: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/>' },
+  { page: 'blog-news', flag: null, title: 'AI 소재추천', desc: '뉴스와 지역 트렌드에서 블로그 소재를 함께 찾아드려요', icon: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/>' },
   { page: 'mapsearch', flag: null, title: '주변 학원 검색', desc: '인근 경쟁학원과 블로그 리뷰를 한눈에', icon: '<circle cx="12" cy="10" r="3"/><path d="M12 21s-7-5.686-7-11a7 7 0 0 1 14 0c0 5.314-7 11-7 11z"/>' },
   { page: 'report', flag: null, title: '지역 트렌드 AI리포트', desc: '우리 지역 수학학원들의 최근 3개월 동향 정리', icon: '<path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M15 3v5h5"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/>' },
   { page: 'list', flag: null, title: '이미지 스튜디오', desc: '성적우수 이미지를 자동으로 생성', icon: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.4"/><path d="M21 16l-5-4-4 3-3-2-5 4"/>' },

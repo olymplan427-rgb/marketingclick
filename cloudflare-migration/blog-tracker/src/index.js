@@ -7,16 +7,18 @@ const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedb
 
 // 액션키별 기본 크레딧 소모량 — config_credit_costs 테이블에 값이 있으면 그쪽이 우선(코드 재배포
 // 없이 D1 값만 바꿔 조정 가능, 기존 구글시트 config 표와 동일한 우선순위 패턴). 없을 때만 기본값 사용.
+// 2026-09-03: 뉴스 기반/지역 트렌드 기반 소재추천을 버튼 하나(topic_suggest_combined)로 통합 —
+// 기존 news_search/region_topic_search 두 키는 더 이상 별도로 호출되지 않아 제거.
 const CREDIT_COST_DEFAULTS = {
   blog_generate: 3, blog_analyze: 1, blog_finalize: 3, image_promo: 1, image_download: 1,
-  mapsearch_nearby: 1, news_search: 1, report_generate: 5, region_topic_search: 3
+  mapsearch_nearby: 1, report_generate: 5, topic_suggest_combined: 4
 };
 // 크레딧 사용 내역(credit_log)에 표시할 한글 이름 — config 표에 관리자가 적어둔 이름과 통일.
 const ACTION_LABELS = {
   blog_generate: '블로그 초안 생성', blog_analyze: 'AI자율분석', blog_finalize: '블로그 최종안 생성',
   image_promo: '이미지 홍보문구 생성', image_download: '이미지 다운로드',
-  mapsearch_nearby: '주변 학원 검색', news_search: '기사검색 주제 추천', report_generate: '지역 트렌드 리포트 생성',
-  region_topic_search: '지역 트렌드 기반 소재추천'
+  mapsearch_nearby: '주변 학원 검색', report_generate: '지역 트렌드 리포트 생성',
+  topic_suggest_combined: 'AI 소재추천(뉴스+지역 트렌드)'
 };
 
 // ── AI 설정 — 활성 프로바이더를 따로 고르지 않음 — API 키가 채워진 행이 곧 쓰이는 AI다. 여러 개가
