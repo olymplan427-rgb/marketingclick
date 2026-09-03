@@ -231,8 +231,11 @@ async function topicSuggestGenerate(btn) {
   topicSuggestRender(combined, notes);
 }
 
-// 제목 한 줄짜리 압축 리스트 — [뉴스]/[지역트렌드] 배지로만 구분. 클릭하면 newsTopicModalOpen이 상세를 모달로 띄움.
+var topicSuggestSelectedIdx = -1;
+
+// 왼쪽 목록 — 제목 한 줄 + [뉴스]/[지역트렌드] 배지만 표시. 클릭하면 오른쪽에 상세를 띄움.
 function topicSuggestRender(topics, notes) {
+  window._topicSuggestions = topics;
   var resultEl = document.getElementById('topic-suggest-result');
   if (!resultEl) return;
 
@@ -242,10 +245,11 @@ function topicSuggestRender(topics, notes) {
 
   var rows = topics.map(function(t, i) {
     var isNews = t.source === 'news';
+    var isActive = i === topicSuggestSelectedIdx;
     var sourceLabel = isNews ? '뉴스' : '지역트렌드';
     var sourceBg = isNews ? 'var(--acc-light)' : '#e0f2f1';
     var sourceColor = isNews ? 'var(--acc)' : '#0f766e';
-    return '<div class="news-topic-row" onclick="newsTopicModalOpen(' + i + ')">'
+    return '<div class="news-topic-row' + (isActive ? ' is-thumb' : '') + '" onclick="topicSuggestShowDetail(' + i + ')">'
       + '<span style="background:' + sourceBg + ';color:' + sourceColor + ';font-size:10px;padding:2px 8px;border-radius:99px;font-weight:700;flex-shrink:0;">' + sourceLabel + '</span>'
       + (t.blogType ? '<span style="background:#f3f4f6;color:var(--mut);font-size:10px;padding:2px 8px;border-radius:99px;font-weight:600;flex-shrink:0;">' + newsEsc(t.blogType) + '</span>' : '')
       + '<span class="news-topic-row-title">' + newsEsc(t.title || '') + '</span>'
@@ -253,11 +257,25 @@ function topicSuggestRender(topics, notes) {
   }).join('');
 
   resultEl.innerHTML = noteHtml + '<h3 style="font-size:14px;font-weight:700;margin:0 0 10px;">추천 주제 (' + topics.length + '건)</h3>' + rows;
+
+  topicSuggestSelectedIdx = -1;
+  topicSuggestRenderDetail(null);
 }
 
-function newsTopicModalOpen(idx) {
-  var t = (window._topicSuggestions || [])[idx];
-  if (!t) return;
+function topicSuggestShowDetail(idx) {
+  topicSuggestSelectedIdx = idx;
+  topicSuggestRender(window._topicSuggestions || [], null);
+  topicSuggestRenderDetail((window._topicSuggestions || [])[idx], idx);
+}
+
+// 오른쪽 패널 — 선택한 주제의 키워드/추천 이유/출처 + "이 주제로 쓰기"
+function topicSuggestRenderDetail(t, idx) {
+  var c = document.getElementById('topic-suggest-detail');
+  if (!c) return;
+  if (!t) {
+    c.innerHTML = '<div class="blog-card"><div style="font-size:13px;font-weight:900;color:var(--txt);margin-bottom:8px;">주제 상세</div><div style="font-size:12px;color:var(--mut);line-height:1.7;">왼쪽 목록에서 주제를 클릭하면<br>여기에 상세 내용이 표시됩니다.</div></div>';
+    return;
+  }
 
   var sources = (t.refs || []).map(function(src) {
     var desc = (src.description || '').replace(/</g, '&lt;');
@@ -266,27 +284,17 @@ function newsTopicModalOpen(idx) {
       + (desc ? '<div style="font-size:11px;color:var(--mut);line-height:1.5;margin:2px 0 0 10px;">' + desc + '</div>' : '') + '</div>';
   }).join('');
 
-  var titleEl = document.getElementById('news-topic-modal-title');
-  if (titleEl) titleEl.textContent = (t.source === 'news' ? '뉴스 기반' : '지역 트렌드 기반') + (t.blogType ? ' · ' + t.blogType : '');
-
-  var bodyEl = document.getElementById('news-topic-modal-body');
-  if (bodyEl) {
-    bodyEl.innerHTML = [
-      '<div style="font-size:16px;font-weight:700;color:var(--txt);margin-bottom:8px;">' + newsEsc(t.title || '') + '</div>',
+  c.innerHTML = [
+    '<div class="blog-card">',
+      '<span style="background:' + (t.source === 'news' ? 'var(--acc-light)' : '#e0f2f1') + ';color:' + (t.source === 'news' ? 'var(--acc)' : '#0f766e') + ';font-size:11px;padding:2px 8px;border-radius:99px;font-weight:700;">' + (t.source === 'news' ? '뉴스' : '지역트렌드') + '</span>',
+      (t.blogType ? ' <span style="background:#f3f4f6;color:var(--mut);font-size:11px;padding:2px 8px;border-radius:99px;font-weight:600;">' + newsEsc(t.blogType) + '</span>' : ''),
+      '<div style="font-size:16px;font-weight:700;color:var(--txt);margin:8px 0 6px;">' + newsEsc(t.title || '') + '</div>',
       '<div style="font-size:12px;color:var(--mut);margin-bottom:10px;">' + newsEsc(t.keywords || '') + '</div>',
       '<div style="font-size:13px;color:var(--txt);line-height:1.6;margin-bottom:10px;">' + newsEsc(t.reason || '') + '</div>',
       (sources ? '<div style="font-size:11px;font-weight:700;color:var(--mut);margin-top:12px;padding-top:10px;border-top:1px solid var(--bdr);">참고 글</div>' + sources : ''),
-      '<button class="btn btn-primary" style="margin-top:14px;width:100%;" onclick="topicSuggestUseSuggestion(' + idx + ')">이 주제로 쓰기</button>'
-    ].join('');
-  }
-
-  var overlay = document.getElementById('news-topic-modal');
-  if (overlay) overlay.style.display = 'flex';
-}
-
-function newsTopicModalClose() {
-  var overlay = document.getElementById('news-topic-modal');
-  if (overlay) overlay.style.display = 'none';
+      '<button class="btn btn-primary" style="margin-top:14px;width:100%;" onclick="topicSuggestUseSuggestion(' + idx + ')">이 주제로 쓰기</button>',
+    '</div>'
+  ].join('');
 }
 
 function topicSuggestUseSuggestion(idx) {
@@ -306,7 +314,6 @@ function topicSuggestUseSuggestion(idx) {
   var links = (t.refs || []).map(function(src) { return src.link; }).filter(Boolean);
   setVal('blog-ref-url', links.join('\n'));
 
-  newsTopicModalClose();
   showPage('blog');
   showToast('주제가 채워졌습니다');
 }

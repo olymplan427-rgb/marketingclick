@@ -258,28 +258,28 @@
 
   <div class="blogtab" id="blogtab-news" style="display:none">
     <div class="page-topbar"><div class="page-topbar-title">AI 소재추천</div></div>
-    <div class="news-source-scroll">
-
-    <div class="tool-section" style="max-width:640px;">
-      <div class="news-source-head">
-        <span class="news-source-head-icon"><svg viewBox="0 0 24 24"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/><path d="M19 15l.8 2.4L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.6z"/></svg></span>
-        <span>학원 프로필 기준으로 지역 트렌드와 최신 교육뉴스를 기반으로 소재를 추천합니다</span>
-      </div>
-      <div id="topic-suggest-hint" style="font-size:12px;color:var(--mut);margin-bottom:10px;"></div>
-      <button class="btn btn-primary" style="width:100%;" onclick="topicSuggestGenerate(this)">소재 추천받기</button>
-      <div id="topic-suggest-result" style="margin-top:14px;"></div>
-    </div>
-
-    </div><!-- /news-source-scroll -->
-
-    <div class="ms-modal-overlay" id="news-topic-modal" style="display:none;" onclick="if(event.target===this) newsTopicModalClose()">
-      <div class="ms-modal-box">
-        <div class="ms-modal-header">
-          <div class="ms-modal-title" id="news-topic-modal-title">주제 상세</div>
-          <button class="ms-modal-close" onclick="newsTopicModalClose()">✕</button>
+    <div class="page-row">
+    <div class="blog-left-wrap">
+    <div class="blog-left">
+      <div class="tool-section">
+        <div class="news-source-head">
+          <span class="news-source-head-icon"><svg viewBox="0 0 24 24"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/><path d="M19 15l.8 2.4L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.6z"/></svg></span>
+          <span>학원 프로필 기준으로 지역 트렌드와 최신 교육뉴스를 기반으로 소재를 추천합니다</span>
         </div>
-        <div class="ms-modal-body" id="news-topic-modal-body"></div>
+        <div id="topic-suggest-hint" style="font-size:12px;color:var(--mut);margin-bottom:10px;"></div>
+        <button class="btn btn-primary" style="width:100%;" onclick="topicSuggestGenerate(this)">소재 추천받기</button>
       </div>
+      <div id="topic-suggest-result"></div>
     </div>
+    </div><!-- /blog-left-wrap -->
+    <div class="blog-right">
+      <div id="topic-suggest-detail">
+        <div class="blog-card">
+          <div style="font-size:13px;font-weight:900;color:var(--txt);margin-bottom:8px;">주제 상세</div>
+          <div style="font-size:12px;color:var(--mut);line-height:1.7;">왼쪽 목록에서 주제를 클릭하면<br>여기에 상세 내용이 표시됩니다.</div>
+        </div>
+      </div>
+    </div><!-- /blog-right -->
+    </div><!-- /page-row -->
   </div><!-- /blogtab-news -->
   </div><!-- /page-blog -->
