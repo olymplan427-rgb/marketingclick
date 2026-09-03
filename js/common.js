@@ -769,6 +769,31 @@ async function adminSetValidationDecision(targetId, decision, note) {
   return _adminCall('adminSetValidationDecision', { targetId: targetId, decision: decision, note: note });
 }
 
+// ── 블로그 프롬프트 버전 관리(2026-09-03) ────────────────────────
+// blog.js가 글 작성 시마다 호출 — 관리자가 활성화해둔 프롬프트 버전을 가져온다.
+// 실패해도 blog.js 쪽에서 코드 내장 기본값으로 계속 동작하므로 여기서는 그냥 던지기만 한다.
+async function getActiveBlogPrompt() {
+  var json = await _adminCall('getActiveBlogPrompt', {});
+  return { versionLabel: json.versionLabel, draftTechnical: json.draftTechnical, finalSystem: json.finalSystem, typeRules: json.typeRules };
+}
+async function adminListPromptVersions() {
+  var json = await _adminCall('adminListPromptVersions', {});
+  return json.versions || [];
+}
+async function adminGetPromptVersionDetail(targetId) {
+  var json = await _adminCall('adminGetPromptVersionDetail', { targetId: targetId });
+  return { versionLabel: json.versionLabel, draftTechnical: json.draftTechnical, finalSystem: json.finalSystem, typeRulesJson: json.typeRulesJson, changeSummary: json.changeSummary, status: json.status };
+}
+async function adminActivatePromptVersion(targetId) {
+  return _adminCall('adminActivatePromptVersion', { targetId: targetId });
+}
+// AI 분석·제안 자체는 자동이지만, 이 호출을 실제로 트리거하는 건 관리자가 버튼을 눌러야
+// 한다(완전 무인 자동화 아님) — 제안된 버전은 항상 draft 상태로만 저장됨.
+async function adminGenerateAiPromptRevision() {
+  var json = await _adminCall('adminGenerateAiPromptRevision', {});
+  return { id: json.id, versionLabel: json.versionLabel, changeSummary: json.changeSummary };
+}
+
 // ── 기능별 on/off (flags.js가 배포 시 window.FEATURE_FLAGS 일부를 덮어씀) ──
 function applyFeatureFlags() {
   var f = window.FEATURE_FLAGS || {};

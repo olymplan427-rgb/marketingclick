@@ -10,8 +10,27 @@ var BLOG_PROMPT_VERSION = 'v9-length-count-includes-whitespace-2026-09-03';
 var BLOG_BANNED_WORDS = ['선행학습', '선행', '예비'];
 var BLOG_WORD_REPLACEMENTS = { '선행학습': '사전학습', '선행': '사전', '예비': '신입' };
 
-// ── 유형별 특화 프롬프트 ──────────────────────────────────────────
-var BLOG_TYPE_RULES = {
+// ── 서버(D1) 프롬프트 버전 관리 ──────────────────────────────────
+// 관리자 페이지에서 AI가 제안한 프롬프트 버전으로 코드 배포 없이 즉시 전환·롤백할 수 있게
+// 하려면 프롬프트 본문이 코드가 아니라 서버 데이터여야 한다(2026-09-03 결정). 아래 *_DEFAULT
+// 값들은 서버에서 활성 버전을 못 받아왔을 때(최초 로드 실패 등) 쓰는 안전망일 뿐, 실제로는
+// blogEnsurePromptLoaded()가 채워주는 BLOG_PROMPT_SERVER가 우선한다.
+var BLOG_PROMPT_SERVER = null; // { draftTechnical, finalSystem, typeRules, versionLabel } — 서버에서 로드됨
+var _blogPromptLoadPromise = null;
+function blogEnsurePromptLoaded() {
+  if (BLOG_PROMPT_SERVER) return Promise.resolve(BLOG_PROMPT_SERVER);
+  if (_blogPromptLoadPromise) return _blogPromptLoadPromise;
+  _blogPromptLoadPromise = getActiveBlogPrompt().then(function(p) {
+    BLOG_PROMPT_SERVER = p || null;
+    return BLOG_PROMPT_SERVER;
+  }).catch(function() {
+    return null; // 실패하면 아래 *_DEFAULT로 계속 동작(서비스 중단 없음)
+  });
+  return _blogPromptLoadPromise;
+}
+
+// ── 유형별 특화 프롬프트 (기본값 — 서버에 활성 버전 있으면 그쪽 우선) ──────
+var BLOG_TYPE_RULES_DEFAULT = {
   '교육칼럼': '## [글 유형: 교육칼럼·학습법]\n제목 패턴: "[올림피아드교육 교육칼럼] [주제]" 또는 "[학습 키워드], [결과/효과]"\n권장 구조(하나 선택):\n- 고민해결형: 학부모·학생 고민 → 원인/배경 → 해결 방법 → 학원 철학 연결 → CTA\n- 비교설명형: 일반적 방식 → 놓치기 쉬운 점 → 더 나은 접근 → CTA\n- 스토리텔링형: 공감 상황 → 전환점 → 변화·성과 → 브랜드 메시지 → CTA\n특화 지시: 학원 주요 키워드·교육 철학을 자연스럽게 녹일 것. 교과서식 결론("열심히 하면 됩니다") 금지.',
 
   '입시정보': '## [글 유형: 입시정보·전형]\n제목 패턴: "[연도]학년도 [학교명] 입학 전형! [핵심 정보 2~3가지] 🔎"\n권장 구조: 핵심 요약(✅ 항목) → 모집인원·일정 → 지원자격 → 전형방법 → 최근 경쟁률 → CTA\n특화 지시: 정확한 숫자·날짜 우선. 핵심 요약 블록(✅)으로 한눈에 파악 가능하게. 학원 연결은 마지막에만.',
@@ -39,8 +58,8 @@ var BLOG_DRAFT_STYLE_DEFAULT = [
   '글마다 구체적인 상황, 사례, 시기를 달리해서 비슷한 글이 반복되지 않도록'
 ].join('\n');
 
-// ── 코드 고정 기술 프롬프트 (편집 불가, 자동 조립) ──────────────
-var BLOG_DRAFT_TECHNICAL = '당신은 {{학원명}} 공식 블로그 전문 에디터입니다.\n\n## [학원 정보]\n- 학원명: {{학원명}}\n- 주요 키워드: {{키워드}}\n- 과목: {{과목}}\n- 주요 대상: {{대상}}\n- 웹사이트: {{웹사이트}}\n\n## [분량 제약 — 최우선 준수]\n{{LENGTH_GUIDE}}\n이 분량 제약은 아래 유형별 권장 구조보다 우선한다. 목표 분량이 작으면 유형 구조의 일부 단계를 생략하거나 통합해서 섹션 개수를 반드시 지킬 것.\n\n{{TYPE_RULES}}\n\n## [원장님 글쓰기 스타일 지시]\n{{USER_STYLE}}\n\n## [출력 형식]\n반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요.\n\n{"title":"포스팅 제목 (25~45자, SEO 키워드 앞부분 배치)","structure":"선택한 구조 유형명","intro":"도입부 (2~3문장)","sections":[{"heading":"소제목","summary":"이 섹션에서 다룰 내용 요약 — 문장 수와 구체성은 목표 분량에 맞출 것","role":"이 섹션이 글 전체에서 맡는 역할 (예: 공감 형성, 문제 제기, 원인 분석, 해결책 제시, 신뢰 근거, 학원 연결)"}],"conclusion":"마무리 멘트 (1~2문장)","ctaDirection":"결론 CTA 방향 — 반드시 아래 3가지 중 하나만 선택: 상담 신청 / 학력진단평가 신청 / 설명회 참석. 글의 주제·맥락에 가장 적합한 것 하나를 선택할 것","tags":["키워드태그1","키워드태그2","키워드태그3"]}\n\n{{LENGTH_GUIDE}}\n규칙: 학원 주요 키워드를 자연스럽게 녹여낼 것 / 각 섹션 role은 서로 달라야 하며 글의 논리 흐름을 만들 것';
+// ── 기술 프롬프트 기본값 (서버에 활성 버전 있으면 그쪽 우선, 자동 조립) ──
+var BLOG_DRAFT_TECHNICAL_DEFAULT = '당신은 {{학원명}} 공식 블로그 전문 에디터입니다.\n\n## [학원 정보]\n- 학원명: {{학원명}}\n- 주요 키워드: {{키워드}}\n- 과목: {{과목}}\n- 주요 대상: {{대상}}\n- 웹사이트: {{웹사이트}}\n\n## [분량 제약 — 최우선 준수]\n{{LENGTH_GUIDE}}\n이 분량 제약은 아래 유형별 권장 구조보다 우선한다. 목표 분량이 작으면 유형 구조의 일부 단계를 생략하거나 통합해서 섹션 개수를 반드시 지킬 것.\n\n{{TYPE_RULES}}\n\n## [원장님 글쓰기 스타일 지시]\n{{USER_STYLE}}\n\n## [출력 형식]\n반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요.\n\n{"title":"포스팅 제목 (25~45자, SEO 키워드 앞부분 배치)","structure":"선택한 구조 유형명","intro":"도입부 (2~3문장)","sections":[{"heading":"소제목","summary":"이 섹션에서 다룰 내용 요약 — 문장 수와 구체성은 목표 분량에 맞출 것","role":"이 섹션이 글 전체에서 맡는 역할 (예: 공감 형성, 문제 제기, 원인 분석, 해결책 제시, 신뢰 근거, 학원 연결)"}],"conclusion":"마무리 멘트 (1~2문장)","ctaDirection":"결론 CTA 방향 — 반드시 아래 3가지 중 하나만 선택: 상담 신청 / 학력진단평가 신청 / 설명회 참석. 글의 주제·맥락에 가장 적합한 것 하나를 선택할 것","tags":["키워드태그1","키워드태그2","키워드태그3"]}\n\n{{LENGTH_GUIDE}}\n규칙: 학원 주요 키워드를 자연스럽게 녹여낼 것 / 각 섹션 role은 서로 달라야 하며 글의 논리 흐름을 만들 것';
 
 // 하위 호환용
 var BLOG_DRAFT_BASE = BLOG_DRAFT_STYLE_DEFAULT;
@@ -48,7 +67,8 @@ var BLOG_DRAFT_SYSTEM = BLOG_DRAFT_STYLE_DEFAULT;
 
 function getBlogDraftSystem(type) {
   var userStyle = localStorage.getItem('mtt_blog_prompt') || BLOG_DRAFT_STYLE_DEFAULT;
-  var typeRule = BLOG_TYPE_RULES[type] || '';
+  var typeRules = (BLOG_PROMPT_SERVER && BLOG_PROMPT_SERVER.typeRules) || BLOG_TYPE_RULES_DEFAULT;
+  var typeRule = typeRules[type] || '';
 
   // 목표 분량에 맞춰 섹션 개수·요약 깊이를 조절하는 지시 — 분량과 무관하게
   // 항상 섹션 2~4개/요약 3~5문장으로 고정돼 있으면, 최종 본문이 확장할 재료 자체가
@@ -68,20 +88,22 @@ function getBlogDraftSystem(type) {
   // 나중에 "이 글이 어떤 분량 지시로 나왔는지" 실제 결과물과 대조할 수 있게 함
   if (blogState.inputs) blogState.inputs._sectionGuide = sectionGuide;
 
-  return BLOG_DRAFT_TECHNICAL
+  var draftTechnical = (BLOG_PROMPT_SERVER && BLOG_PROMPT_SERVER.draftTechnical) || BLOG_DRAFT_TECHNICAL_DEFAULT;
+  return draftTechnical
     .replace('{{TYPE_RULES}}', typeRule)
     .replace('{{USER_STYLE}}', userStyle)
     .replace(/\{\{LENGTH_GUIDE\}\}/g, lengthGuide);
 }
 
-var BLOG_FINAL_SYSTEM = '당신은 {{학원명}} 공식 블로그 전문 에디터입니다.\n제공된 초안과 변형 요소를 바탕으로 완성된 네이버 블로그 본문을 작성합니다.\n\n## [브랜드 정보]\n- 학원명: {{학원명}}\n- 주요 키워드: {{키워드}}\n- 과목: {{과목}}\n- 주요 대상: {{대상}}\n- 웹사이트: {{웹사이트}}\n\n## [분량 — 반드시 준수]\n- 목표 분량: {{목표분량}}자 (공백 포함 — title, intro, 모든 section의 heading+body, conclusion, tags, 연락처 블록까지 전부 합친 최종 결과물 전체 기준. 네이버 블로그에 그대로 붙여넣을 실제 글자수와 같아야 한다)\n- 반드시 목표 분량의 90~110% 범위 안에서 작성한다. 소제목·구분선·태그·연락처 블록도 전부 이 분량에 포함되므로, 본문(body)은 그만큼 줄여서 전체 합이 목표를 넘지 않게 조절한다.\n- 초안 설계도의 summary를 그대로 옮기지 말고, 각 섹션 body를 구체적 사례·설명·전환 문장으로 확장하되, 전체 분량 목표를 넘지 않는 선에서 조절한다.\n- 목표보다 짧게 끝내는 것도, 목표를 초과하는 것도 금지한다.\n\n## [말투 & 표현 규칙]\n- 경칭: 학부모 → "학부모님", 학생 → "학생들", "우리 학생들"\n- 어미: 기본은 "~해요/~예요" 계열, 문단 첫 문장·핵심 강조 문장에서만 "~합니다/~입니다" 예외 사용 (무작위 혼합 금지)\n- 이모지: 단락당 1~2개 자연스럽게 (💚💡📚✨ 등)\n- 줄바꿈: 모바일 가독성 위해 2~3문장 후 빈 줄\n- SEO 키워드: 원형 그대로 제목·첫 단락에 자연스럽게\n\n## [유사도 방지]\n- 초안에서 선택한 구조 유형을 유지합니다.\n- "주목해 주세요", "꼭 확인해 보세요", "적극 추천합니다", "지금 바로", "고민이신 학부모님이라면" 같은 표현은 한 글에 1회 이상 반복하지 않습니다.\n- 이번 글만의 구체적 상황·사례·포인트가 본문에 명확히 드러나야 합니다.\n\n## [AI 티 방지 규칙 — 반드시 준수]\nS1 절대 금지 (한 번이라도 나오면 수정):\n- 연결어미 뒤 쉼표 금지: "하지만," "그리고," "그러나," → 쉼표 삭제\n- AI 상투구 금지: "결론적으로", "혁신적인", "시대가 도래했다", "주목할 만하다", "~의 가능성을 열어준다", "새로운 패러다임"\n- 번역투 금지: "~에 대해" → "~를", "~를 통해" → "~로", "가지고 있다" → "있다", 이중 피동("~되어지다")\n\nS2 같은 패턴 3회 이상 금지:\n- 볼드(**) 사용 금지 — 네이버 블로그에는 서식 없는 텍스트로 복사되어 별표(**)가 그대로 노출되므로 어떤 경우에도 사용하지 않는다\n- 정도부사 반복 — "매우", "정말", "굉장히" 연속 사용 금지\n- 문두 접속사 남발 — "하지만", "그러나", "이는", "즉" 연속 금지\n- 기계적 나열 — "첫째/둘째/셋째" → 산문으로 녹이기\n- 헤징 과다 — "~할 수 있을 것으로 보인다", "~라고 할 수 있다" 반복 금지\n- "~것이다", "~할 필요가 있다" 반복 금지\n\n리듬: 단문(10자 이하)과 장문(30자 이상)을 섞어 단조로움 방지. 종결어미는 무작위로 섞지 않는다 — 기본 어미를 "~해요/~예요" 계열로 통일하고, 문단 첫 문장이나 핵심을 강조하는 문장에서만 예외적으로 "~합니다/~입니다"를 사용해 무게감을 준다.\n\n## [금지 표현 — 교육청 표시광고 심의 대상]\n아래 단어는 제목·본문·태그 어디에도 어떤 형태로도 사용하지 않습니다. 반드시 대체 표현으로 재구성합니다.\n- "선행" (선행학습 등 포함) → "사전학습" 등으로 대체\n- "예비" (예비중1 등 포함) → "신입" 또는 문맥에 맞게 자연스럽게 재구성\n\n## [글 마지막 연락처 블록]\n글 마지막에 아래 형식으로 연락처 블록을 반드시 포함합니다.\n{{학원명}}\n📞 {{연락처}}\n🗺️ 네이버지도: {{지도링크}}\n🌐 {{웹사이트}}\n연락처나 링크가 비어 있는 항목은 생략합니다.\n\n반드시 아래 JSON 형식으로만 응답하세요.\n\n{"title":"최종 포스팅 제목 (25~45자, SEO 키워드 앞부분)","intro":"도입부 본문 (초안 도입부 기반, 이번 글 방식으로 시작)","sections":[{"heading":"소제목","body":"완성된 본문 내용. 줄바꿈은 \\n\\n 사용"}],"conclusion":"마무리 본문 + CTA 블록 (CTA 유형에 따라 작성)","tags":["태그1","태그2","태그3","태그4","태그5"],"images":[{"section_index":0,"placement":"1번 섹션 본문 중간","search_query":"학생 공부 교실 (구글 이미지 검색에 넣을 한국어 검색어, 2~4단어)","description":"이 이미지가 표현하는 장면과 분위기를 한국어로 2~3문장으로 설명"}]}\n\n이미지 규칙: 썸네일은 만들지 않는다. 각 섹션(section)마다 그 내용과 어울리는 본문 삽입 이미지 1개씩을 images 배열에 추천한다 (section_index는 0부터 시작하는 sections 배열 인덱스). AI로 이미지를 생성하지 않고, 라이선스가 확보된 이미지를 사용자가 직접 찾아 쓸 것이므로 search_query에는 참고용 추천 검색어로 해당 섹션 내용에 어울리는 사진이 나올 만한 짧고 구체적인 한국어 검색어를 넣을 것 (예: "칠판 앞 선생님 학생", "책상 공부 노트북"). 추상적인 단어("성장", "미래") 대신 눈에 보이는 구체적 장면 위주로.\n글자 수: 위 [분량] 섹션의 목표({{목표분량}}자, 공백 포함)를 반드시 지킬 것';
+var BLOG_FINAL_SYSTEM_DEFAULT = '당신은 {{학원명}} 공식 블로그 전문 에디터입니다.\n제공된 초안과 변형 요소를 바탕으로 완성된 네이버 블로그 본문을 작성합니다.\n\n## [브랜드 정보]\n- 학원명: {{학원명}}\n- 주요 키워드: {{키워드}}\n- 과목: {{과목}}\n- 주요 대상: {{대상}}\n- 웹사이트: {{웹사이트}}\n\n## [분량 — 반드시 준수]\n- 목표 분량: {{목표분량}}자 (공백 포함 — title, intro, 모든 section의 heading+body, conclusion, tags, 연락처 블록까지 전부 합친 최종 결과물 전체 기준. 네이버 블로그에 그대로 붙여넣을 실제 글자수와 같아야 한다)\n- 반드시 목표 분량의 90~110% 범위 안에서 작성한다. 소제목·구분선·태그·연락처 블록도 전부 이 분량에 포함되므로, 본문(body)은 그만큼 줄여서 전체 합이 목표를 넘지 않게 조절한다.\n- 초안 설계도의 summary를 그대로 옮기지 말고, 각 섹션 body를 구체적 사례·설명·전환 문장으로 확장하되, 전체 분량 목표를 넘지 않는 선에서 조절한다.\n- 목표보다 짧게 끝내는 것도, 목표를 초과하는 것도 금지한다.\n\n## [말투 & 표현 규칙]\n- 경칭: 학부모 → "학부모님", 학생 → "학생들", "우리 학생들"\n- 어미: 기본은 "~해요/~예요" 계열, 문단 첫 문장·핵심 강조 문장에서만 "~합니다/~입니다" 예외 사용 (무작위 혼합 금지)\n- 이모지: 단락당 1~2개 자연스럽게 (💚💡📚✨ 등)\n- 줄바꿈: 모바일 가독성 위해 2~3문장 후 빈 줄\n- SEO 키워드: 원형 그대로 제목·첫 단락에 자연스럽게\n\n## [유사도 방지]\n- 초안에서 선택한 구조 유형을 유지합니다.\n- "주목해 주세요", "꼭 확인해 보세요", "적극 추천합니다", "지금 바로", "고민이신 학부모님이라면" 같은 표현은 한 글에 1회 이상 반복하지 않습니다.\n- 이번 글만의 구체적 상황·사례·포인트가 본문에 명확히 드러나야 합니다.\n\n## [AI 티 방지 규칙 — 반드시 준수]\nS1 절대 금지 (한 번이라도 나오면 수정):\n- 연결어미 뒤 쉼표 금지: "하지만," "그리고," "그러나," → 쉼표 삭제\n- AI 상투구 금지: "결론적으로", "혁신적인", "시대가 도래했다", "주목할 만하다", "~의 가능성을 열어준다", "새로운 패러다임"\n- 번역투 금지: "~에 대해" → "~를", "~를 통해" → "~로", "가지고 있다" → "있다", 이중 피동("~되어지다")\n\nS2 같은 패턴 3회 이상 금지:\n- 볼드(**) 사용 금지 — 네이버 블로그에는 서식 없는 텍스트로 복사되어 별표(**)가 그대로 노출되므로 어떤 경우에도 사용하지 않는다\n- 정도부사 반복 — "매우", "정말", "굉장히" 연속 사용 금지\n- 문두 접속사 남발 — "하지만", "그러나", "이는", "즉" 연속 금지\n- 기계적 나열 — "첫째/둘째/셋째" → 산문으로 녹이기\n- 헤징 과다 — "~할 수 있을 것으로 보인다", "~라고 할 수 있다" 반복 금지\n- "~것이다", "~할 필요가 있다" 반복 금지\n\n리듬: 단문(10자 이하)과 장문(30자 이상)을 섞어 단조로움 방지. 종결어미는 무작위로 섞지 않는다 — 기본 어미를 "~해요/~예요" 계열로 통일하고, 문단 첫 문장이나 핵심을 강조하는 문장에서만 예외적으로 "~합니다/~입니다"를 사용해 무게감을 준다.\n\n## [금지 표현 — 교육청 표시광고 심의 대상]\n아래 단어는 제목·본문·태그 어디에도 어떤 형태로도 사용하지 않습니다. 반드시 대체 표현으로 재구성합니다.\n- "선행" (선행학습 등 포함) → "사전학습" 등으로 대체\n- "예비" (예비중1 등 포함) → "신입" 또는 문맥에 맞게 자연스럽게 재구성\n\n## [글 마지막 연락처 블록]\n글 마지막에 아래 형식으로 연락처 블록을 반드시 포함합니다.\n{{학원명}}\n📞 {{연락처}}\n🗺️ 네이버지도: {{지도링크}}\n🌐 {{웹사이트}}\n연락처나 링크가 비어 있는 항목은 생략합니다.\n\n반드시 아래 JSON 형식으로만 응답하세요.\n\n{"title":"최종 포스팅 제목 (25~45자, SEO 키워드 앞부분)","intro":"도입부 본문 (초안 도입부 기반, 이번 글 방식으로 시작)","sections":[{"heading":"소제목","body":"완성된 본문 내용. 줄바꿈은 \\n\\n 사용"}],"conclusion":"마무리 본문 + CTA 블록 (CTA 유형에 따라 작성)","tags":["태그1","태그2","태그3","태그4","태그5"],"images":[{"section_index":0,"placement":"1번 섹션 본문 중간","search_query":"학생 공부 교실 (구글 이미지 검색에 넣을 한국어 검색어, 2~4단어)","description":"이 이미지가 표현하는 장면과 분위기를 한국어로 2~3문장으로 설명"}]}\n\n이미지 규칙: 썸네일은 만들지 않는다. 각 섹션(section)마다 그 내용과 어울리는 본문 삽입 이미지 1개씩을 images 배열에 추천한다 (section_index는 0부터 시작하는 sections 배열 인덱스). AI로 이미지를 생성하지 않고, 라이선스가 확보된 이미지를 사용자가 직접 찾아 쓸 것이므로 search_query에는 참고용 추천 검색어로 해당 섹션 내용에 어울리는 사진이 나올 만한 짧고 구체적인 한국어 검색어를 넣을 것 (예: "칠판 앞 선생님 학생", "책상 공부 노트북"). 추상적인 단어("성장", "미래") 대신 눈에 보이는 구체적 장면 위주로.\n글자 수: 위 [분량] 섹션의 목표({{목표분량}}자, 공백 포함)를 반드시 지킬 것';
 
 // 목표 분량 숫자를 실제로 주입 — 기존 코드는 BLOG_FINAL_SYSTEM을 정적 문자열로만 썼는데,
 // 그 안의 {{목표분량}} 자리표시자를 채워주지 않으면 분량 지시가 숫자 없이 뭉뚱그려져
 // 모델이 유저 메시지 쪽 숫자를 다시 참조해야 하는 약한 지시가 됨
 function getBlogFinalSystem() {
   var targetLen = (blogState.inputs && blogState.inputs.length) || '1500';
-  return BLOG_FINAL_SYSTEM.replace(/\{\{목표분량\}\}/g, targetLen);
+  var finalSystem = (BLOG_PROMPT_SERVER && BLOG_PROMPT_SERVER.finalSystem) || BLOG_FINAL_SYSTEM_DEFAULT;
+  return finalSystem.replace(/\{\{목표분량\}\}/g, targetLen);
 }
 
 function autoResizeBlogTextarea(el) {
@@ -490,6 +512,7 @@ async function blogGenerateDraft() {
       blogState.inputs.refContents = refContents;
       btn.textContent = '초안 생성중...';
     }
+    await blogEnsurePromptLoaded(); // 관리자가 활성화한 최신 프롬프트 버전을 반영
     // 구글 시트에서 유사 글 조회 → 유사 방지 지시 삽입
     var allPosts = await gasGetRecentPosts(50);
     var systemPrompt = applyAcademyVars(getBlogDraftSystem(blogState.inputs.type));
@@ -585,6 +608,7 @@ async function blogFinalize(triggerBtn) {
   if (btn) { btn.disabled = true; btn.textContent = '최종 본문 작성중...'; }
   try {
     await useCreditConfirm('blog_finalize', '블로그 최종안 생성');
+    await blogEnsurePromptLoaded();
     var userMsg = '[최초 입력값]\n' + blogBuildInputText()
       + '\n\n[확정된 글 설계도]\n' + JSON.stringify(updatedDraft, null, 2)
       + '\n\n[추가 수정 요청]\n' + (notes || '없음')
@@ -623,7 +647,7 @@ async function blogFinalize(triggerBtn) {
       structure:    updatedDraft.structure                            || '',
       targetLength: blogState.inputs.length                          || '',
       sectionGuide: blogState.inputs._sectionGuide                    || '',
-      promptVersion: BLOG_PROMPT_VERSION
+      promptVersion: (BLOG_PROMPT_SERVER && BLOG_PROMPT_SERVER.versionLabel) || BLOG_PROMPT_VERSION
     });
   } catch(e) {
     if (!e.cancelled) blogShowAlert('2', e.message || '오류가 발생했습니다.');

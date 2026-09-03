@@ -109,3 +109,22 @@ CREATE TABLE IF NOT EXISTS post_ai_validations (
   admin_note TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_post_ai_validations_post ON post_ai_validations(post_id);
+
+-- 블로그 작성 프롬프트 버전 관리(2026-09-03) — blog.js에 하드코딩됐던 프롬프트 본문을 여기로
+-- 옮겨서, 관리자 페이지에서 코드 배포 없이 버전을 즉시 전환·롤백할 수 있게 한다. AI가 자동으로
+-- 새 버전을 제안해도 status='draft'로만 들어가고, 관리자가 활성화해야 실제로 쓰인다.
+CREATE TABLE IF NOT EXISTS prompt_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  version_label TEXT,
+  created_at TEXT,
+  source TEXT,           -- 'manual' | 'ai_auto'
+  status TEXT,           -- 'draft' | 'active' | 'archived'
+  based_on_id INTEGER,
+  change_summary TEXT,
+  draft_technical TEXT,
+  final_system TEXT,
+  type_rules_json TEXT,
+  activated_at TEXT,
+  activated_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_prompt_versions_status ON prompt_versions(status);
