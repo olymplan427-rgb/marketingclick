@@ -769,15 +769,28 @@ async function adminValidatePostAI(env, postId) {
     row.tags || ''
   ].join('\n');
 
-  const raw = await runWithGenLock(env, () => callAiRelay(env, {
-    provider: cfg.provider, apiKey: cfg.apiKey, models: cfg.models,
-    system: AI_VALIDATION_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userContent }],
-    max_tokens: 4096
-  }));
+  // 검증 응답은 7개 항목 점수 + 이슈마다 원문/이유/수정안까지 포함해서 blog_finalize보다도
+  // 훨씬 길다. "생각" 토큰이 max_tokens를 다 써버려 텍스트가 하나도 안 나오는 경우(2026-09
+  // 실측)가 있어, 빈 응답이면 토큰을 늘려 한 번 더 시도한다(blog.js의 blogGenerateWithRepair와
+  // 같은 패턴, 서버 쪽에서 재현).
+  async function attempt(maxTokens) {
+    const r = await runWithGenLock(env, () => callAiRelay(env, {
+      provider: cfg.provider, apiKey: cfg.apiKey, models: cfg.models,
+      system: AI_VALIDATION_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: userContent }],
+      max_tokens: maxTokens
+    }));
+    if (!r.ok) return { text: '', raw: r };
+    const t = (r.data && r.data.content && r.data.content[0] && r.data.content[0].text) || r.text || '';
+    return { text: t, raw: r };
+  }
+
+  let { text, raw } = await attempt(6000);
+  if (raw.ok && !text) {
+    ({ text, raw } = await attempt(12000));
+  }
   if (!raw.ok) return raw;
-  const text = (raw.data && raw.data.content && raw.data.content[0] && raw.data.content[0].text) || raw.text || '';
-  if (!text) return { ok: false, error: 'AI로부터 빈 응답을 받았습니다.' };
+  if (!text) return { ok: false, error: 'AI로부터 빈 응답을 받았습니다(재시도 후에도 실패) — max_tokens을 더 늘려야 할 수 있습니다.' };
 
   let parsed;
   try {
