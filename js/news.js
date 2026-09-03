@@ -148,7 +148,9 @@ async function fetchRegionTopics(region) {
   });
 }
 
-// 페이지 진입 시(showPage('blog-news')) 호출 — 프로필 없으면 등록 안내, 있으면 사용될 학원/지역을 알려줌.
+// 페이지 진입 시(showPage('blog-news')) 호출 — 프로필 없으면 등록 안내, 있으면 지역 입력창을
+// 프로필 주소 기준으로 자동 채움(구/군/시 단위 추정치라 부정확할 수 있어 항상 수정 가능하게 열어둠 —
+// 동 단위로 더 좁게 조회하고 싶은 사용자를 위해 2026-09-03 다시 입력창을 추가함).
 function topicSuggestInit() {
   var hintEl = document.getElementById('topic-suggest-hint');
   var profile = loadAcademyProfile();
@@ -158,11 +160,24 @@ function topicSuggestInit() {
     if (resultEl) resultEl.innerHTML = topicSuggestNoProfileMessage();
     return;
   }
-  var region = (typeof reportExtractRegion === 'function') ? reportExtractRegion(profile.address || '') : '';
+
+  var input = document.getElementById('topic-suggest-region');
+  if (input && !input._inited) {
+    input._inited = true;
+    input.value = (typeof reportExtractRegion === 'function') ? reportExtractRegion(profile.address || '') : '';
+  }
+  topicSuggestUpdateHint();
+}
+
+function topicSuggestUpdateHint() {
+  var hintEl = document.getElementById('topic-suggest-hint');
+  var input = document.getElementById('topic-suggest-region');
+  var profile = loadAcademyProfile();
+  var region = input ? input.value.trim() : '';
   if (hintEl) {
     hintEl.textContent = region
-      ? '"' + profile.name + '" 프로필 기준(지역: ' + region + ')으로 조회됩니다.'
-      : '"' + profile.name + '" 프로필 기준으로 조회됩니다. (주소가 없어 지역 트렌드 기반은 건너뜁니다)';
+      ? '"' + (profile.name || '학원') + '" 프로필 기준으로 조회됩니다. 지역은 필요하면 위에서 직접 수정하세요(예: 구 대신 동).'
+      : '"' + (profile.name || '학원') + '" 프로필 기준으로 조회됩니다. 지역을 입력하지 않으면 지역 트렌드 기반은 건너뜁니다.';
   }
 }
 
@@ -193,7 +208,8 @@ async function topicSuggestGenerate(btn) {
   btn.textContent = '⏳ 뉴스·지역 트렌드 수집 중...';
   if (resultEl) resultEl.innerHTML = '';
 
-  var region = (typeof reportExtractRegion === 'function') ? reportExtractRegion(profile.address || '') : '';
+  var regionInput = document.getElementById('topic-suggest-region');
+  var region = regionInput ? regionInput.value.trim() : '';
 
   var newsPromise = fetchNewsTopics()
     .then(function(topics) { return { topics: topics }; })
@@ -215,7 +231,7 @@ async function topicSuggestGenerate(btn) {
     return { title: t.title, blogType: t.blogType, keywords: t.keywords, reason: t.reason, refs: t.refs, source: 'news' };
   }));
 
-  if (regionRes.skipped) notes.push('지역 트렌드 기반: 학원 프로필에 주소가 등록되어 있지 않아 건너뛰었습니다.');
+  if (regionRes.skipped) notes.push('지역 트렌드 기반: 지역이 입력되어 있지 않아 건너뛰었습니다.');
   else if (regionRes.error) notes.push('지역 트렌드 기반(' + region + '): ' + regionRes.error);
   else combined = combined.concat(regionRes.topics.map(function(t) {
     return { title: t.title, blogType: t.blogType, keywords: t.keywords, reason: t.reason, refs: t.refs, source: 'region' };
