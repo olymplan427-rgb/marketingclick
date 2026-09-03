@@ -367,7 +367,37 @@ function hideLoginOverlay() {
   if (nameEl && auth) nameEl.textContent = auth.name + (auth.academy ? ' · ' + auth.academy : '');
   if (typeof creditUpdateBadge === 'function') creditUpdateBadge();
   applyAdminVisibility();
+  applyNavFreeBadges();
   if (typeof homeInit === 'function') homeInit();
+}
+
+// 사이드바 "무료" 배지 — 실제 크레딧 비용(관리자가 D1에서 조정 가능)이 0이면 자동으로 붙는다.
+// 여러 액션키가 관련된 메뉴(예: AI 글작성)는 전부 0이어야 무료로 표시. 히스토리/경쟁학원
+// 모니터링/학교 점유율은 애초에 크레딧 시스템과 무관해 대상에서 제외(2026-09-04).
+var NAV_FREE_BADGE_MAP = [
+  { badgeId: 'nav-blog-write-free', keys: ['blog_generate', 'blog_analyze', 'blog_finalize'] },
+  { badgeId: 'nav-blog-news-free', keys: ['topic_suggest_combined'] },
+  { badgeId: 'nav-mapsearch-free', keys: ['mapsearch_nearby'] },
+  { badgeId: 'nav-report-free', keys: ['report_generate'] },
+  { badgeId: 'nav-list-free', keys: ['image_generate'] }
+];
+
+async function applyNavFreeBadges() {
+  var auth = getUserAuth();
+  if (!auth) return;
+  await Promise.all(NAV_FREE_BADGE_MAP.map(async function(item) {
+    var badgeEl = document.getElementById(item.badgeId);
+    if (!badgeEl) return;
+    try {
+      var quotes = await Promise.all(item.keys.map(function(k) {
+        return getCreditQuote(k).catch(function() { return { cost: 1 }; });
+      }));
+      var allFree = quotes.every(function(q) { return Number(q.cost) === 0; });
+      badgeEl.style.display = allFree ? '' : 'none';
+    } catch (e) {
+      badgeEl.style.display = 'none';
+    }
+  }));
 }
 function initLoginGate() {
   _checkAutoLogout();

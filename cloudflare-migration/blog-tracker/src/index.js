@@ -206,14 +206,17 @@ async function getCreditHistory(env, userId, n) {
 }
 
 // 실제 차감 없이 "이 액션을 하면 얼마가 나가는지" 미리보기(사용 전 확인 팝업용).
+// unlimited(관리자/무제한 계정)여도 cost는 항상 함께 내려준다 — 사이드바 "무료" 배지가 실제
+// 설정된 비용(관리자가 D1에서 조정 가능)이 0인지 판단할 때 unlimited 계정도 정확히 판단하려면
+// 이 필드가 꼭 필요함(2026-09-04, applyNavFreeBadges에서 사용).
 async function getCreditQuote(env, userId, actionKey) {
   if (!actionKey) return { ok: false, error: 'actionKey가 필요합니다.' };
   const u = await findUser(env, userId);
   if (!u) return { ok: false, error: '사용자를 찾을 수 없습니다.' };
-  if (String(u.role) === '관리자') return { ok: true, unlimited: true };
-  const monthlyCredit = parseInt(u.monthlyCredit, 10);
-  if (isNaN(monthlyCredit) || monthlyCredit <= 0) return { ok: true, unlimited: true };
   const cost = await getCreditCost(env, actionKey);
+  if (String(u.role) === '관리자') return { ok: true, unlimited: true, cost };
+  const monthlyCredit = parseInt(u.monthlyCredit, 10);
+  if (isNaN(monthlyCredit) || monthlyCredit <= 0) return { ok: true, unlimited: true, cost };
   const currentMonth = monthKST();
   let remaining = parseInt(u.remainingCredit, 10);
   if (String(u.creditResetMonth || '') !== currentMonth || isNaN(remaining)) remaining = monthlyCredit;
