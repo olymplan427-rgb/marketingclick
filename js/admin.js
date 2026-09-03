@@ -164,10 +164,8 @@ function adminRenderCreditCosts() {
     var rows = g.keys.map(function(actionKey) {
       var c = byKey[actionKey];
       if (!c) return '';
-      var isFree = Number(c.cost) === 0;
-      var freeBadge = isFree ? ' <span class="info-banner-badge" style="background:var(--acc-light);color:var(--acc);">무료</span>' : '';
       return '<tr style="border-bottom:1px solid var(--bdr);">'
-        + '<td style="padding:10px;">' + adminEsc(c.label) + freeBadge + '</td>'
+        + '<td style="padding:10px;">' + adminEsc(c.label) + '</td>'
         + '<td style="padding:10px;"><input class="blog-input" type="number" min="0" style="width:100px;" id="admin-cost-' + c.actionKey + '" value="' + adminEsc(c.cost) + '"></td>'
         + '<td style="padding:10px;"><button class="btn" onclick="adminSaveCreditCost(\'' + c.actionKey + '\')">저장</button></td>'
       + '</tr>';
