@@ -259,31 +259,17 @@
   <div class="blogtab" id="blogtab-news" style="display:none">
     <div class="page-topbar"><div class="page-topbar-title">AI 소재추천</div></div>
     <div class="news-source-scroll">
-    <div class="news-source-columns">
 
-    <div class="tool-section news-source-col">
+    <div class="tool-section" style="max-width:640px;">
       <div class="news-source-head">
-        <span class="news-source-head-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/></svg></span>
-        <span>뉴스 기반 — 최근 1개월 교육 뉴스에서 소재 추천</span>
+        <span class="news-source-head-icon"><svg viewBox="0 0 24 24"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/><path d="M19 15l.8 2.4L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.6z"/></svg></span>
+        <span>학원 프로필 기준으로 뉴스·지역 트렌드 소재를 함께 추천합니다</span>
       </div>
-      <input class="blog-input" style="margin-bottom:6px;visibility:hidden;" aria-hidden="true" tabindex="-1">
-      <div style="font-size:12px;margin-bottom:10px;visibility:hidden;" aria-hidden="true">&nbsp;</div>
-      <button class="btn btn-primary" style="width:100%;" onclick="newsSuggestTopics(this)">최근 교육 뉴스 불러와 주제 추천받기</button>
-      <div id="news-result" style="margin-top:14px;"></div>
+      <div id="topic-suggest-hint" style="font-size:12px;color:var(--mut);margin-bottom:10px;"></div>
+      <button class="btn btn-primary" style="width:100%;" onclick="topicSuggestGenerate(this)">소재 추천받기</button>
+      <div id="topic-suggest-result" style="margin-top:14px;"></div>
     </div>
 
-    <div class="tool-section news-source-col">
-      <div class="news-source-head">
-        <span class="news-source-head-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="10" r="3"/><path d="M12 21s-7-5.686-7-11a7 7 0 0 1 14 0c0 5.314-7 11-7 11z"/></svg></span>
-        <span>지역 트렌드 기반 — 최근 3개월 경쟁학원 블로그에서 소재 추천</span>
-      </div>
-      <input class="blog-input" id="region-topic-region" placeholder="예: 강남구" style="margin-bottom:6px;">
-      <div id="region-topic-hint" style="font-size:12px;color:var(--mut);margin-bottom:10px;"></div>
-      <button class="btn btn-primary" style="width:100%;" onclick="regionTopicsGenerate(this)">지역 트렌드 분석해서 주제 추천받기</button>
-      <div id="region-topic-result" style="margin-top:14px;"></div>
-    </div>
-
-    </div><!-- /news-source-columns -->
     </div><!-- /news-source-scroll -->
 
     <div class="ms-modal-overlay" id="news-topic-modal" style="display:none;" onclick="if(event.target===this) newsTopicModalClose()">

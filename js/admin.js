@@ -149,7 +149,7 @@ async function adminSaveFallback(provider) {
 
 // ── 기능별 크레딧 비용 ────────────────────────────────────────────
 var CREDIT_COST_GROUPS = [
-  { title: '블로그', keys: ['blog_analyze', 'blog_generate', 'blog_finalize', 'news_search'] },
+  { title: '블로그', keys: ['blog_analyze', 'blog_generate', 'blog_finalize', 'topic_suggest_combined'] },
   { title: '도구', keys: ['mapsearch_nearby', 'report_generate', 'image_promo', 'image_download'] }
 ];
 
