@@ -717,7 +717,7 @@ async function adminDeleteAnnouncement(targetId) {
 // ── 관리자: 전체 사용자 블로그 글 조회/삭제 ────────────────────
 async function adminListPosts() {
   var json = await _adminCall('adminListPosts', { n: 200 });
-  return json.posts || [];
+  return { posts: json.posts || [], validationSummary: json.validationSummary || [], validationNote: json.validationNote || '' };
 }
 async function adminDeletePost(targetId) {
   return _adminCall('adminDeletePost', { targetId: targetId });
