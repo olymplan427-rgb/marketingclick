@@ -9,14 +9,17 @@ const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedb
 // 없이 D1 값만 바꿔 조정 가능, 기존 구글시트 config 표와 동일한 우선순위 패턴). 없을 때만 기본값 사용.
 // 2026-09-03: 뉴스 기반/지역 트렌드 기반 소재추천을 버튼 하나(topic_suggest_combined)로 통합 —
 // 기존 news_search/region_topic_search 두 키는 더 이상 별도로 호출되지 않아 제거.
+// image_generate: 성적우수 이미지 생성은 캔버스 렌더링뿐이라 실제로 크레딧을 차감하는 코드가 없음
+// (js/image.js 어디서도 이 키로 useCredit을 호출하지 않음) — 관리자 화면에 "무료"로 표시하기 위한
+// 표시 전용 항목. 여기 값을 바꿔도 실제 차감에는 영향 없으니 착각하지 말 것(2026-09-04).
 const CREDIT_COST_DEFAULTS = {
-  blog_generate: 3, blog_analyze: 1, blog_finalize: 3, image_promo: 1, image_download: 1,
+  blog_generate: 3, blog_analyze: 1, blog_finalize: 3, image_generate: 0, image_promo: 1, image_download: 1,
   mapsearch_nearby: 1, report_generate: 5, topic_suggest_combined: 4
 };
 // 크레딧 사용 내역(credit_log)에 표시할 한글 이름 — config 표에 관리자가 적어둔 이름과 통일.
 const ACTION_LABELS = {
   blog_generate: '블로그 초안 생성', blog_analyze: 'AI자율분석', blog_finalize: '블로그 최종안 생성',
-  image_promo: '이미지 홍보문구 생성', image_download: '이미지 다운로드',
+  image_generate: '성적우수 이미지 생성', image_promo: '이미지 홍보문구 생성', image_download: '이미지 다운로드',
   mapsearch_nearby: '주변 학원 검색', report_generate: '지역 트렌드 리포트 생성',
   topic_suggest_combined: 'AI 소재추천(뉴스+지역 트렌드)'
 };
