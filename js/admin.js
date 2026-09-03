@@ -1,7 +1,7 @@
 // 관리자 페이지 — AI 프로바이더 키/모델, 기능별 크레딧 비용, 사용자 관리(D1 직접 반영).
 // 서버(blog-tracker Worker)가 role==='관리자' 아니면 모든 admin* 액션을 거부하므로,
 // 여기서는 sidebar 노출 + 편의 UI만 담당(applyAdminVisibility는 js/common.js).
-var adminState = { config: null, users: [], notices: [], posts: [], selectedPostId: null };
+var adminState = { config: null, users: [], notices: [], posts: [], selectedPostId: null, validationSummary: [], validationNote: '' };
 
 function adminEsc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -18,16 +18,19 @@ function adminShowError(msg) {
 async function adminInit() {
   adminShowError('');
   try {
-    var [config, users, notices, posts] = await Promise.all([adminGetConfig(), adminListUsers(), getAnnouncements(), adminListPosts()]);
+    var [config, users, notices, postsResult] = await Promise.all([adminGetConfig(), adminListUsers(), getAnnouncements(), adminListPosts()]);
     adminState.config = config;
     adminState.users = users;
     adminState.notices = notices;
-    adminState.posts = posts;
+    adminState.posts = postsResult.posts;
+    adminState.validationSummary = postsResult.validationSummary;
+    adminState.validationNote = postsResult.validationNote;
     adminRenderAiList();
     adminRenderCreditCosts();
     adminRenderUsers();
     adminRenderNotices();
     adminRenderPosts();
+    adminRenderValidationSummary();
     var dateEl = document.getElementById('admin-notice-date');
     if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
   } catch (e) {
@@ -254,13 +257,14 @@ function adminRenderPosts() {
     if (!filter) return true;
     return (p.userId || '').toLowerCase().indexOf(filter) !== -1 || (p.title || '').toLowerCase().indexOf(filter) !== -1;
   });
-  if (!list.length) { body.innerHTML = '<tr><td colspan="5" style="padding:10px;color:var(--mut);">글이 없습니다.</td></tr>'; return; }
+  if (!list.length) { body.innerHTML = '<tr><td colspan="6" style="padding:10px;color:var(--mut);">글이 없습니다.</td></tr>'; return; }
   body.innerHTML = list.map(function(p) {
     return '<tr style="border-bottom:1px solid var(--bdr);">'
       + '<td style="padding:10px;font-weight:700;">' + adminEsc(p.userId) + '</td>'
       + '<td style="padding:10px;color:var(--mut);">' + adminEsc(p.date) + '</td>'
       + '<td style="padding:10px;">' + adminEsc(p.title) + '</td>'
       + '<td style="padding:10px;color:var(--mut);">' + adminEsc(p.type) + '</td>'
+      + '<td style="padding:10px;">' + adminValidationBadge(p.validation) + '</td>'
       + '<td style="padding:10px;white-space:nowrap;">'
         + '<button class="btn" onclick="adminTogglePostDetail(' + p.id + ')">보기</button> '
         + '<button class="btn" onclick="adminDeletePostRow(' + p.id + ')">삭제</button>'
@@ -269,12 +273,67 @@ function adminRenderPosts() {
   }).join('');
 }
 
+var ADMIN_VALIDATION_STATUS_STYLE = {
+  PASS:   { label: 'PASS',   bg: '#e3f1e6', fg: '#1e7a34' },
+  REVISE: { label: 'REVISE', bg: '#fff4d6', fg: '#8a5a00' },
+  HOLD:   { label: 'HOLD',   bg: '#fde3e3', fg: '#a51d1d' }
+};
+function adminValidationBadge(validation) {
+  if (!validation) return '';
+  var s = ADMIN_VALIDATION_STATUS_STYLE[validation.status] || ADMIN_VALIDATION_STATUS_STYLE.PASS;
+  var issueCount = (validation.issues || []).filter(function(i) { return i.severity !== 'INFO'; }).length;
+  return '<span style="display:inline-block;background:' + s.bg + ';color:' + s.fg + ';border-radius:20px;padding:3px 9px;font-size:11px;font-weight:800;">' + s.label + (issueCount ? ' · ' + issueCount : '') + '</span>';
+}
+
+// 프롬프트 버전별 문제 집계 — "검증하고 끝"이 아니라 어느 프롬프트 버전에서 어떤 문제가
+// 반복되는지 보고 blog.js 프롬프트를 계속 고쳐나가기 위한 패널.
+function adminRenderValidationSummary() {
+  var el = document.getElementById('admin-validation-summary');
+  if (!el) return;
+  var summary = adminState.validationSummary || [];
+  var note = adminState.validationNote ? '<div style="font-size:11.5px;color:var(--mut);margin-bottom:6px;">' + adminEsc(adminState.validationNote) + '</div>' : '';
+  if (!summary.length) { el.innerHTML = note; return; }
+  var rows = summary.map(function(v) {
+    var cats = Object.keys(v.categoryCounts || {}).map(function(c) { return c + ' ' + v.categoryCounts[c]; }).join(', ') || '없음';
+    return '<tr style="border-bottom:1px solid var(--bdr);">'
+      + '<td style="padding:7px 10px;font-weight:700;">' + adminEsc(v.promptVersion) + '</td>'
+      + '<td style="padding:7px 10px;">' + v.total + '건</td>'
+      + '<td style="padding:7px 10px;color:#1e7a34;">PASS ' + (v.statusCounts.PASS || 0) + '</td>'
+      + '<td style="padding:7px 10px;color:#8a5a00;">REVISE ' + (v.statusCounts.REVISE || 0) + '</td>'
+      + '<td style="padding:7px 10px;color:#a51d1d;">HOLD ' + (v.statusCounts.HOLD || 0) + '</td>'
+      + '<td style="padding:7px 10px;color:var(--mut);">' + adminEsc(cats) + '</td>'
+    + '</tr>';
+  }).join('');
+  el.innerHTML = note
+    + '<div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:6px;">프롬프트 버전별 검증 현황 (이 버전에서 반복되는 문제를 보고 blog.js를 고칠지 판단하세요)</div>'
+    + '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
+    + '<thead><tr style="border-bottom:1px solid var(--bdr);color:var(--mut);text-align:left;"><th style="padding:7px 10px;">프롬프트 버전</th><th style="padding:7px 10px;">건수</th><th style="padding:7px 10px;" colspan="3">상태</th><th style="padding:7px 10px;">문제 카테고리별 건수</th></tr></thead>'
+    + '<tbody>' + rows + '</tbody></table></div>';
+}
+
+function adminRenderValidationIssues(validation) {
+  if (!validation) return '';
+  var issues = (validation.issues || []).filter(function(i) { return i.severity !== 'INFO'; });
+  var infos = (validation.issues || []).filter(function(i) { return i.severity === 'INFO'; });
+  if (!issues.length && !infos.length) return '<div style="font-size:12.5px;color:#1e7a34;margin-bottom:10px;">규칙 검사 통과 (문제 없음)</div>';
+  var sevColor = { BLOCKER: '#a51d1d', MAJOR: '#c2740b', MINOR: '#6b7280' };
+  var rows = issues.concat(infos).map(function(i) {
+    var color = sevColor[i.severity] || '#6b7280';
+    return '<div style="font-size:12.5px;line-height:1.6;padding:6px 0;border-bottom:1px solid var(--bdr);">'
+      + '<span style="color:' + color + ';font-weight:800;">[' + i.severity + ']</span> '
+      + '<span style="color:var(--mut);">' + adminEsc(i.category) + '</span> — ' + adminEsc(i.message)
+    + '</div>';
+  }).join('');
+  return '<div style="margin-bottom:12px;"><div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:4px;">규칙 검사 결과 (' + adminEsc(validation.rulesetVersion) + ')</div>' + rows + '</div>';
+}
+
 function adminTogglePostDetail(id) {
   var post = adminState.posts.filter(function(p) { return p.id === id; })[0];
   if (!post) return;
   document.getElementById('admin-post-modal-title').textContent = post.userId + ' · ' + post.date + ' · ' + post.type;
   document.getElementById('admin-post-modal-body').innerHTML =
     '<div style="font-size:15px;font-weight:800;color:var(--txt);margin-bottom:10px;">' + adminEsc(post.title) + '</div>'
+    + adminRenderValidationIssues(post.validation)
     + '<div style="font-size:13px;color:var(--txt);line-height:1.7;white-space:pre-wrap;">' + adminEsc(post.body) + '</div>';
   document.getElementById('admin-post-modal').style.display = 'flex';
 }

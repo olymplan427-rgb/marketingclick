@@ -560,12 +560,125 @@ async function adminDeleteAnnouncement(env, id) {
   return { ok: true };
 }
 
+// ── 블로그 글 검증 1계층: 코드 기반 규칙 검사 (AI 호출 없음, 즉시 판정) ──────
+// U2M 블로그 글 검증 시스템 기준서 v1.0(2026-09-03) 4장 기준. 여기서는 저장된 글
+// 하나만으로 확인 가능한 항목만 다룬다(캠퍼스 마스터 데이터 대조·외부 사실 확인은
+// 별도 인프라가 필요해 후속 단계로 미룸 — adminListPosts 응답의 note 참고).
+//
+// 최종 목적은 "검증하고 끝"이 아니라 "이 결과를 보고 blog.js 프롬프트를 계속 고쳐나가는
+// 것"이므로, 각 글의 prompt_version을 그대로 결과에 남기고 버전별로 문제를 집계해서
+// "이 프롬프트 버전에서 어떤 문제가 반복되는지"를 admin.js가 바로 보여줄 수 있게 한다.
+const VALIDATION_RULESET_VERSION = 'u2m-rule-tier-1.0';
+const VALIDATION_BANNED_WORDS = ['선행학습', '선행', '예비'];
+const VALIDATION_CLICHE_PHRASES = ['결론적으로', '혁신적인', '놀라운', '획기적인', '완전히 달라집니다', '중요한 포인트가 있어요', '진짜 시작점'];
+
+function countOccurrences(text, needle) {
+  if (!needle) return 0;
+  return text.split(needle).length - 1;
+}
+
+// 분량 판정은 blog.js의 실제 생성 지시(90~110%)와 맞춰야 "프롬프트대로 잘 쓴 글"이
+// 검증에서 억울하게 걸리는 일이 없다(2026-09-03 합의). 80~89%/111~120%는 경고,
+// 그 밖은 차단.
+function ruleCheckPost(p) {
+  const issues = [];
+  const body = p.body || '';
+  const bodyLen = body.replace(/\s/g, '').length;
+  const target = parseInt(p.targetLength, 10);
+
+  if (!body.trim()) {
+    issues.push({ severity: 'BLOCKER', category: 'FORMAT', message: '본문이 비어 있습니다.' });
+  }
+
+  if (target > 0) {
+    const ratio = Math.round((bodyLen / target) * 100);
+    if (ratio < 80 || ratio > 120) {
+      issues.push({ severity: 'BLOCKER', category: 'FORMAT', message: '분량이 목표(' + target + '자)의 ' + ratio + '%로 허용 범위를 크게 벗어났습니다.' });
+    } else if (ratio < 90 || ratio > 110) {
+      issues.push({ severity: 'MAJOR', category: 'FORMAT', message: '분량이 목표의 ' + ratio + '%로 권장 범위(90~110%)를 벗어났습니다.' });
+    }
+  } else {
+    issues.push({ severity: 'INFO', category: 'FORMAT', message: '목표 분량 정보가 없어 분량 검사를 건너뜁니다.' });
+  }
+
+  const title = p.title || '';
+  if (title.length > 0 && (title.length < 20 || title.length > 50)) {
+    issues.push({ severity: 'MINOR', category: 'TITLE', message: '제목 길이(' + title.length + '자)가 권장 범위(25~45자)를 벗어났습니다.' });
+  }
+
+  VALIDATION_BANNED_WORDS.forEach((w) => {
+    if (body.indexOf(w) !== -1 || title.indexOf(w) !== -1) {
+      issues.push({ severity: 'MAJOR', category: 'FORMAT', message: '금지 표현 "' + w + '"이(가) 본문 또는 제목에 남아있습니다.' });
+    }
+  });
+
+  if (body.indexOf('**') !== -1) {
+    issues.push({ severity: 'MAJOR', category: 'FORMAT', message: '마크다운 볼드(**)가 본문에 그대로 노출되어 있습니다.' });
+  }
+  if (/&(amp|lt|gt|quot|nbsp);/.test(body)) {
+    issues.push({ severity: 'MINOR', category: 'FORMAT', message: '변환되지 않은 HTML 엔티티가 본문에 남아있습니다.' });
+  }
+
+  const tags = (p.tags || '').split(',').map((t) => t.trim()).filter(Boolean);
+  if (!tags.length) {
+    issues.push({ severity: 'MINOR', category: 'FORMAT', message: '태그가 없습니다.' });
+  } else {
+    if (tags.length > 7) issues.push({ severity: 'MINOR', category: 'FORMAT', message: '태그가 ' + tags.length + '개로 너무 많습니다.' });
+    if (new Set(tags).size !== tags.length) issues.push({ severity: 'MINOR', category: 'FORMAT', message: '중복된 태그가 있습니다.' });
+  }
+
+  VALIDATION_CLICHE_PHRASES.forEach((ph) => {
+    const count = countOccurrences(body, ph);
+    if (count >= 1) issues.push({ severity: count >= 2 ? 'MAJOR' : 'MINOR', category: 'STYLE', message: '상투적 표현 "' + ph + '"이(가) ' + count + '회 사용되었습니다.' });
+  });
+
+  const emojiCount = (body.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu) || []).length;
+  if (emojiCount > 15) issues.push({ severity: 'MINOR', category: 'STYLE', message: '이모지가 ' + emojiCount + '개로 과다합니다.' });
+
+  if (body.indexOf('📞') === -1 && body.indexOf('전화') === -1) {
+    issues.push({ severity: 'INFO', category: 'CONTACT', message: '연락처 블록을 찾지 못했습니다 — 실제 연락처가 비어있어 생략된 것인지 확인이 필요합니다.' });
+  }
+
+  let maxSeverity = 'INFO';
+  issues.forEach((i) => {
+    if (i.severity === 'BLOCKER') maxSeverity = 'BLOCKER';
+    else if (i.severity === 'MAJOR' && maxSeverity !== 'BLOCKER') maxSeverity = 'MAJOR';
+    else if (i.severity === 'MINOR' && maxSeverity !== 'BLOCKER' && maxSeverity !== 'MAJOR') maxSeverity = 'MINOR';
+  });
+  const status = maxSeverity === 'BLOCKER' ? 'HOLD' : maxSeverity === 'MAJOR' ? 'REVISE' : 'PASS';
+  return { rulesetVersion: VALIDATION_RULESET_VERSION, status, issues };
+}
+
+// 프롬프트 버전별로 어떤 문제가 몇 번 반복되는지 집계 — "검증하고 끝"이 아니라
+// "이 결과를 보고 blog.js 프롬프트를 계속 고쳐나간다"는 목적을 위한 핵심 데이터.
+// 예: v6-length-priority에서 분량 경고가 자주 나오면 그 버전의 분량 지시를 다시 손봐야 한다는 신호.
+function summarizeByPromptVersion(postsWithValidation) {
+  const byVersion = {};
+  postsWithValidation.forEach((p) => {
+    const v = p.promptVersion || '(미기록)';
+    if (!byVersion[v]) byVersion[v] = { promptVersion: v, total: 0, statusCounts: { PASS: 0, REVISE: 0, HOLD: 0 }, categoryCounts: {} };
+    const bucket = byVersion[v];
+    bucket.total++;
+    bucket.statusCounts[p.validation.status] = (bucket.statusCounts[p.validation.status] || 0) + 1;
+    p.validation.issues.forEach((i) => {
+      if (i.severity === 'INFO') return; // 정보성 항목은 집계에서 제외(연락처 미확인 등 잡음 방지)
+      bucket.categoryCounts[i.category] = (bucket.categoryCounts[i.category] || 0) + 1;
+    });
+  });
+  return Object.values(byVersion).sort((a, b) => (a.promptVersion < b.promptVersion ? 1 : -1));
+}
+
 // ── 관리자: 전체 사용자 블로그 글 조회/삭제 ──────────────────────
 async function adminListPosts(env, n) {
   const { results } = await env.DB.prepare(
-    'SELECT id, created_at, type, title, body, user_id FROM blog_posts ORDER BY id DESC LIMIT ?'
+    'SELECT id, created_at, type, title, body, tags, target_length, prompt_version, user_id FROM blog_posts ORDER BY id DESC LIMIT ?'
   ).bind(Math.min(n || 200, 500)).all();
-  return { ok: true, posts: results.map((r) => ({ id: r.id, date: rowDateKST(r.created_at), type: r.type || '', title: r.title || '(제목 없음)', body: r.body || '', userId: r.user_id || '' })) };
+  const posts = results.map((r) => {
+    const post = { id: r.id, date: rowDateKST(r.created_at), type: r.type || '', title: r.title || '(제목 없음)', body: r.body || '', tags: r.tags || '', targetLength: r.target_length || '', promptVersion: r.prompt_version || '', userId: r.user_id || '' };
+    post.validation = ruleCheckPost(post);
+    return post;
+  });
+  return { ok: true, posts, validationSummary: summarizeByPromptVersion(posts), validationNote: '지금은 1계층(분량·금지어·서식·상투구) 규칙 검사만 자동 실행됩니다. 캠퍼스 정보 대조·AI 내용 검증·외부 사실 확인은 아직 미구현입니다.' };
 }
 
 async function adminDeletePost(env, id) {
