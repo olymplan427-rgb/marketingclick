@@ -785,9 +785,24 @@ async function adminValidatePostAI(env, postId) {
     return { text: t, raw: r };
   }
 
-  let { text, raw } = await attempt(6000);
-  if (raw.ok && !text) {
-    ({ text, raw } = await attempt(12000));
+  // Vercel 릴레이의 60초 실행시간 제한에 걸리면(HTTP 504) 릴레이가 자기 게이트웨이가
+  // 만든 HTML 오류 페이지를 돌려주는데, 이건 실제 AI 오류가 아니라 응답이 늦어서 잘린
+  // 것뿐이라 대부분 재시도하면 풀린다(blog.js 쪽과 동일한 원인·해법, 2026-09 실측).
+  // 화면에 바로 에러를 보여주지 않고 백오프하며 최대 3회까지 조용히 재시도한다.
+  // 두 실패 원인은 반대 방향 처방이 필요하다 — 토큰(생각 토큰이 다 써서 텍스트가 빈 경우)은
+  // 키워서 재시도해야 하고, 릴레이 타임아웃(504, 응답이 오래 걸려서 생기는 문제)은 토큰을
+  // 더 키우면 오히려 악화되므로 같은 토큰으로 잠시 대기 후 재시도해야 한다.
+  let tokens = 6000;
+  let text = '', raw = { ok: false };
+  const maxAttempts = 3;
+  for (let i = 0; i < maxAttempts; i++) {
+    ({ text, raw } = await attempt(tokens));
+    if (text) break; // 성공
+    if (!raw.ok) {
+      if (i < maxAttempts - 1) await sleep(3000 * (i + 1)); // 504 등 → 같은 토큰으로 대기 후 재시도
+    } else {
+      tokens = Math.min(tokens * 2, 16000); // ok인데 텍스트가 없음 → 토큰을 키워 즉시 재시도
+    }
   }
   if (!raw.ok) return raw;
   if (!text) return { ok: false, error: 'AI로부터 빈 응답을 받았습니다(재시도 후에도 실패) — max_tokens을 더 늘려야 할 수 있습니다.' };
