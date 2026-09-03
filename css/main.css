@@ -258,6 +258,9 @@ canvas{display:block;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.15);cu
 .mon-pill.active-region{background:#111;color:#fff;border-color:#111;}
 .mon-pill.active-date{background:var(--acc);color:#fff;border-color:var(--acc);}
 .mon-sep{width:1px;height:20px;background:#e4e6e9;align-self:center;}
+.news-source-pill{font-size:13px;padding:7px 16px;border-radius:99px;border:1px solid var(--bdr);background:#fff;color:var(--mut);cursor:pointer;transition:all .12s;font-weight:700;}
+.news-source-pill:hover{border-color:var(--acc);color:var(--acc);}
+.news-source-pill.active{background:var(--acc);color:#fff;border-color:var(--acc);}
 .mon-main{display:flex;flex:1;overflow:hidden;}
 .mon-left{width:390px;border-right:1px solid #e4e6e9;display:flex;flex-direction:column;background:#fff;overflow:hidden;flex-shrink:0;}
 .mon-left-header{padding:14px 24px 10px;border-bottom:1px solid #e4e6e9;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}

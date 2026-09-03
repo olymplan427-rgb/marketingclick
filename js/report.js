@@ -1,13 +1,16 @@
 // ── 지역 트렌드 리포트 (지역 경쟁학원 블로그 분석) ────────────────────────
 // 우리 학원이 속한 구/동을 기준으로 "{지역} 수학학원" 네이버 블로그를 모아
 // ① 언급량 추이(월별 건수 — AI 없이 직접 집계) ② 주요 발화 학원 프로필
-// ③ 콘텐츠 패턴 ④ 시사점 ⑤ 블로그 주제 추천 순으로 정리한다.
-// 숫자 집계는 할루시네이션 위험이 있는 AI에 맡기지 않고 원본 데이터에서 직접 계산한다.
+// ③ 콘텐츠 패턴 ④ 시사점 순으로 정리한다. 숫자 집계는 할루시네이션 위험이
+// 있는 AI에 맡기지 않고 원본 데이터에서 직접 계산한다.
+// 블로그 주제 추천은 2026-09-03부로 AI 소재추천(js/news.js, regionTopics*)으로
+// 이관됨 — 이 리포트는 순수 동향 분석에만 집중. reportFetchRegionBlogs는
+// news.js의 지역 트렌드 기반 소재추천에서도 재사용(각자 독립적으로 호출).
 
 // 100개 게시글을 한 번의 AI 호출로 다 분석하면(응답까지 길게 요구) Vercel 릴레이의 실행시간 제한을
 // 넘겨 타임아웃(524)이 나는 문제가 실측으로 확인되어, 맵-리듀스로 나눔(2026-09-01):
 // ① MAP — REPORT_CHUNK_SIZE개씩 나눠 묶음별로 학원 프로필/패턴 후보만 가볍게 추출(호출 여러 번, 각각은 작아서 빠름)
-// ② REDUCE — 묶음별 후보들(원본 블로그 글이 아니라 이미 요약된 소량 데이터)을 모아 중복 병합 + 시사점/주제 추천까지 최종 정리
+// ② REDUCE — 묶음별 후보들(원본 블로그 글이 아니라 이미 요약된 소량 데이터)을 모아 중복 병합 + 시사점까지 최종 정리
 // 데이터 100개·응답 분량·thinking 전부 원래대로 유지 — 품질 저하 없이 호출 하나당 처리량만 줄이는 방식.
 var REPORT_CHUNK_SIZE = 20;
 
@@ -40,13 +43,9 @@ var REPORT_SYSTEM_REDUCE = [
   '2. patterns: 후보 패턴 중 유사한 것끼리 통합해서 공통 패턴 3~5개로 정리해라.',
   '   각 항목: label(패턴명), description(구체적 설명, 1~2문장)',
   '3. insights: 위 학원 프로필·패턴을 바탕으로 우리 학원이 참고할 만한 전략적 시사점 2~4개(각 1~2문장, 문자열 배열)',
-  '4. topics: 위 분석을 바탕으로 우리 학원이 쓸 만한 블로그 주제 5~8개.',
-  '   경쟁학원 사례를 참고하되 그대로 베끼지 말고 우리 학원 관점으로 재구성하고, 아직 안 다뤄진 소재를 우선하라.',
-  '   각 항목: title/blogType/keywords/reason/sourceIndexes(참고할 학원의 sourceIndexes 중에서 0~3개 골라 사용)',
-  '   blogType은 다음 중 하나: 교육칼럼, 입시정보, 학원홍보, 합격인터뷰, 수학정보, 이벤트안내, 학원공지',
   '',
   '반드시 아래 JSON 형식으로만 응답 (다른 텍스트 금지):',
-  '{"brands":[{"name":"","summary":"","sourceIndexes":[0]}],"patterns":[{"label":"","description":""}],"insights":[""],"topics":[{"title":"","blogType":"교육칼럼","keywords":"","reason":"","sourceIndexes":[0]}]}'
+  '{"brands":[{"name":"","summary":"","sourceIndexes":[0]}],"patterns":[{"label":"","description":""}],"insights":[""]}'
 ].join('\n');
 
 function reportFillPlaceholders(template) {
@@ -186,12 +185,11 @@ async function reportGenerate(btn) {
     var brands = parsed.brands || [];
     var patterns = parsed.patterns || [];
     var insights = parsed.insights || [];
-    var topics = parsed.topics || [];
-    if (!brands.length && !patterns.length && !topics.length) { alert('정리할 만한 내용을 찾지 못했습니다.'); return; }
+    if (!brands.length && !patterns.length && !insights.length) { alert('정리할 만한 내용을 찾지 못했습니다.'); return; }
 
     await useCreditCommit('report_generate');
     window._reportItems = items;
-    reportRender(region, trend, brands, patterns, insights, topics);
+    reportRender(region, trend, brands, patterns, insights);
   } catch (e) {
     alert('리포트 생성 실패: ' + e.message);
   } finally {
@@ -217,7 +215,7 @@ function reportSourceLinks(sourceIndexes) {
   }).join('');
 }
 
-function reportRender(region, trend, brands, patterns, insights, topics) {
+function reportRender(region, trend, brands, patterns, insights) {
   var resultEl = document.getElementById('report-result');
   if (!resultEl) return;
 
@@ -251,23 +249,6 @@ function reportRender(region, trend, brands, patterns, insights, topics) {
       '</ul>'
     : '<p style="font-size:14px;color:var(--txt);">-</p>') + '</div>';
 
-  var topicCards = topics.map(function(t, i) {
-    return [
-      '<div class="blog-card" style="margin-bottom:10px;">',
-        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">',
-          '<div style="flex:1;">',
-            '<span style="background:var(--acc-light);color:var(--acc);font-size:12px;font-weight:800;padding:2px 8px;border-radius:99px;">' + reportEsc(t.blogType || '') + '</span>',
-            '<div style="font-size:16px;font-weight:800;color:var(--txt);margin:6px 0 4px;">' + reportEsc(t.title || '') + '</div>',
-            '<div style="font-size:13px;color:var(--txt);font-weight:600;margin-bottom:6px;">' + reportEsc(t.keywords || '') + '</div>',
-            '<div style="font-size:13px;color:var(--txt);">' + reportEsc(t.reason || '') + '</div>',
-            reportSourceLinks(t.sourceIndexes),
-          '</div>',
-          '<button class="btn btn-primary" style="white-space:nowrap;" onclick="reportUseTopicSuggestion(' + i + ')">이 주제로 쓰기</button>',
-        '</div>',
-      '</div>'
-    ].join('');
-  }).join('');
-
   function section(title, body) {
     return '<div style="margin-bottom:20px;"><div style="font-size:15px;font-weight:900;color:var(--txt);margin-bottom:8px;">' + title + '</div>' + body + '</div>';
   }
@@ -277,33 +258,7 @@ function reportRender(region, trend, brands, patterns, insights, topics) {
     section('① 언급량 추이 (네이버 블로그, 월별)', trendSection) +
     section('② 자주 언급되는 학원 (' + brands.length + '건)', brandCards || '<p style="font-size:14px;color:var(--txt);">식별된 학원이 없습니다.</p>') +
     section('③ 콘텐츠 패턴', patternCards || '<p style="font-size:14px;color:var(--txt);">특별한 패턴이 발견되지 않았습니다.</p>') +
-    section('④ 시사점', insightList || '<p style="font-size:14px;color:var(--txt);">-</p>') +
-    section('⑤ 추천 블로그 주제 (' + topics.length + '건)', topicCards);
-  window._reportTopics = topics;
-}
-
-function reportUseTopicSuggestion(idx) {
-  var t = (window._reportTopics || [])[idx];
-  if (!t) return;
-  var setVal = function(id, val) {
-    var el = document.getElementById(id);
-    if (el && val) el.value = val;
-  };
-  setVal('blog-topic', t.title);
-  setVal('blog-keywords', t.keywords);
-  var typeEl = document.getElementById('blog-type');
-  if (typeEl && t.blogType && Array.from(typeEl.options).some(function(o) { return o.value === t.blogType; })) {
-    typeEl.value = t.blogType;
-  }
-
-  var links = (t.sourceIndexes || []).map(function(idx2) {
-    var src = (window._reportItems || [])[idx2];
-    return src && src.link;
-  }).filter(Boolean);
-  setVal('blog-ref-url', links.join('\n'));
-
-  showPage('blog');
-  showToast('주제가 채워졌습니다');
+    section('④ 시사점', insightList || '<p style="font-size:14px;color:var(--txt);">-</p>');
 }
 
 function reportEsc(s) {
