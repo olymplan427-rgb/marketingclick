@@ -1,7 +1,7 @@
 // 관리자 페이지 — AI 프로바이더 키/모델, 기능별 크레딧 비용, 사용자 관리(D1 직접 반영).
 // 서버(blog-tracker Worker)가 role==='관리자' 아니면 모든 admin* 액션을 거부하므로,
 // 여기서는 sidebar 노출 + 편의 UI만 담당(applyAdminVisibility는 js/common.js).
-var adminState = { config: null, users: [], notices: [], posts: [], selectedPostId: null, validationSummary: [], validationNote: '', promptVersionFilter: '' };
+var adminState = { config: null, users: [], notices: [], posts: [], selectedPostId: null, validationSummary: [], validationNote: '', promptVersionFilter: '', promptVersions: [] };
 
 function adminEsc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -18,19 +18,21 @@ function adminShowError(msg) {
 async function adminInit() {
   adminShowError('');
   try {
-    var [config, users, notices, postsResult] = await Promise.all([adminGetConfig(), adminListUsers(), getAnnouncements(), adminListPosts()]);
+    var [config, users, notices, postsResult, promptVersions] = await Promise.all([adminGetConfig(), adminListUsers(), getAnnouncements(), adminListPosts(), adminListPromptVersions()]);
     adminState.config = config;
     adminState.users = users;
     adminState.notices = notices;
     adminState.posts = postsResult.posts;
     adminState.validationSummary = postsResult.validationSummary;
     adminState.validationNote = postsResult.validationNote;
+    adminState.promptVersions = promptVersions;
     adminRenderAiList();
     adminRenderCreditCosts();
     adminRenderUsers();
     adminRenderNotices();
     adminRenderPosts();
     adminRenderValidationSummary();
+    adminRenderPromptVersions();
     var dateEl = document.getElementById('admin-notice-date');
     if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
   } catch (e) {
@@ -246,6 +248,89 @@ async function adminSaveUser(id) {
   } catch (e) {
     adminShowError(e.message || '저장 실패');
   }
+}
+
+// ── 블로그 작성 프롬프트 버전 관리(2026-09-03) ────────────────────
+var ADMIN_PROMPT_STATUS_STYLE = {
+  active:   { label: '활성',    bg: '#e3f1e6', fg: '#1e7a34' },
+  draft:    { label: '검토대기', bg: '#fff4d6', fg: '#8a5a00' },
+  archived: { label: '보관됨',   bg: '#eee',    fg: '#6b7280' }
+};
+function adminRenderPromptVersions() {
+  var body = document.getElementById('admin-prompt-version-body');
+  if (!body) return;
+  var versions = adminState.promptVersions || [];
+  if (!versions.length) { body.innerHTML = '<tr><td colspan="7" style="padding:10px;color:var(--mut);">버전이 없습니다.</td></tr>'; return; }
+  body.innerHTML = versions.map(function(v) {
+    var s = ADMIN_PROMPT_STATUS_STYLE[v.status] || { label: v.status, bg: '#eee', fg: '#374151' };
+    var badge = '<span style="display:inline-block;background:' + s.bg + ';color:' + s.fg + ';border-radius:20px;padding:3px 9px;font-size:11px;font-weight:800;">' + s.label + '</span>';
+    var sourceLabel = v.source === 'ai_auto' ? 'AI 제안' : '수동';
+    var activateBtn = v.status === 'active' ? '' : '<button class="btn" onclick="adminRunActivatePromptVersion(' + v.id + ')">활성화</button> ';
+    return '<tr style="border-bottom:1px solid var(--bdr);">'
+      + '<td style="padding:10px;font-weight:700;font-size:12px;">' + adminEsc(v.versionLabel) + '</td>'
+      + '<td style="padding:10px;color:var(--mut);">' + adminEsc(sourceLabel) + '</td>'
+      + '<td style="padding:10px;">' + badge + '</td>'
+      + '<td style="padding:10px;">' + v.postCount + '건</td>'
+      + '<td style="padding:10px;color:var(--mut);font-size:12px;">' + adminEsc(v.changeSummary || '(초기 버전)') + '</td>'
+      + '<td style="padding:10px;color:var(--mut);font-size:11px;">' + adminEsc(v.activatedAt || '-') + '</td>'
+      + '<td style="padding:10px;white-space:nowrap;">'
+        + activateBtn
+        + '<button class="btn" onclick="adminPreviewPromptVersion(' + v.id + ')">미리보기</button>'
+      + '</td>'
+    + '</tr>';
+  }).join('');
+}
+
+async function adminRunGenerateAiPromptRevision(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'AI 분석 중... (재시도 포함 최대 3분 소요될 수 있음)'; }
+  try {
+    var res = await adminGenerateAiPromptRevision();
+    adminState.promptVersions = await adminListPromptVersions();
+    adminRenderPromptVersions();
+    alert('새 버전(' + res.versionLabel + ')이 "검토대기" 상태로 생성되었습니다.\n\n변경 요약: ' + (res.changeSummary || '(없음)') + '\n\n"미리보기"로 내용을 확인한 뒤 괜찮으면 "활성화"를 눌러주세요.');
+  } catch (e) {
+    alert('AI 개선안 생성 실패: ' + (e.message || ''));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'AI 개선안 생성 (호출당 비용 발생)'; }
+  }
+}
+
+async function adminRunActivatePromptVersion(id) {
+  if (!confirm('이 버전을 활성화하면 지금부터 모든 사용자의 블로그 작성에 즉시 적용됩니다. 계속할까요?')) return;
+  try {
+    await adminActivatePromptVersion(id);
+    adminState.promptVersions = await adminListPromptVersions();
+    adminRenderPromptVersions();
+  } catch (e) {
+    alert('활성화 실패: ' + (e.message || ''));
+  }
+}
+
+async function adminPreviewPromptVersion(id) {
+  try {
+    var detail = await adminGetPromptVersionDetail(id);
+    var typeRules = {};
+    try { typeRules = JSON.parse(detail.typeRulesJson || '{}'); } catch (e) {}
+    var typeRulesHtml = Object.keys(typeRules).map(function(k) {
+      return '<div style="margin-bottom:8px;"><strong style="font-size:12px;color:var(--acc);">' + adminEsc(k) + '</strong><div style="font-size:12px;color:var(--txt);white-space:pre-wrap;">' + adminEsc(typeRules[k]) + '</div></div>';
+    }).join('');
+    document.getElementById('admin-prompt-modal-title').textContent = detail.versionLabel + ' (' + detail.status + ')';
+    document.getElementById('admin-prompt-modal-body').innerHTML =
+      (detail.changeSummary ? '<div style="background:var(--acc-light);color:var(--acc);border-radius:8px;padding:10px 12px;font-size:12.5px;margin-bottom:14px;">' + adminEsc(detail.changeSummary) + '</div>' : '')
+      + '<div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:4px;">draft_technical</div>'
+      + '<div style="font-size:12px;color:var(--txt);white-space:pre-wrap;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:10px;margin-bottom:14px;">' + adminEsc(detail.draftTechnical) + '</div>'
+      + '<div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:4px;">final_system</div>'
+      + '<div style="font-size:12px;color:var(--txt);white-space:pre-wrap;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:10px;margin-bottom:14px;">' + adminEsc(detail.finalSystem) + '</div>'
+      + '<div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:4px;">type_rules</div>'
+      + typeRulesHtml;
+    document.getElementById('admin-prompt-modal').style.display = 'flex';
+  } catch (e) {
+    alert('불러오기 실패: ' + (e.message || ''));
+  }
+}
+
+function adminClosePromptModal() {
+  document.getElementById('admin-prompt-modal').style.display = 'none';
 }
 
 // ── 블로그 글 관리 (전체 사용자) ───────────────────────────────

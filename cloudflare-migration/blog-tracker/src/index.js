@@ -2,8 +2,9 @@
 // Sheets API 왕복이 없어지고, Worker 내부에서 로컬 SQLite 쿼리로 끝나 응답 속도가 크게 개선됨.
 // 클라이언트(js/common.js)는 전혀 수정 불필요 — 액션/응답 형태 100% 동일하게 유지.
 import { sendMail } from './mail.js';
-const ADMIN_ACTIONS = ['adminListUsers', 'adminUpdateUser', 'adminApproveUser', 'adminGetConfig', 'adminSetConfigValue', 'adminSetModels', 'adminSetCreditCost', 'adminAddAnnouncement', 'adminUpdateAnnouncement', 'adminDeleteAnnouncement', 'adminListPosts', 'adminDeletePost', 'adminValidatePostAI', 'adminGetPostValidations', 'adminSetValidationDecision'];
-const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus', 'creditHistory', 'creditQuote', 'getAnnouncements', ...ADMIN_ACTIONS];
+const ADMIN_ACTIONS = ['adminListUsers', 'adminUpdateUser', 'adminApproveUser', 'adminGetConfig', 'adminSetConfigValue', 'adminSetModels', 'adminSetCreditCost', 'adminAddAnnouncement', 'adminUpdateAnnouncement', 'adminDeleteAnnouncement', 'adminListPosts', 'adminDeletePost', 'adminValidatePostAI', 'adminGetPostValidations', 'adminSetValidationDecision', 'adminListPromptVersions', 'adminGetPromptVersionDetail', 'adminActivatePromptVersion', 'adminGenerateAiPromptRevision'];
+// getActiveBlogPrompt: 관리자 전용이 아님 — 블로그를 쓰는 모든 로그인 사용자가 글 작성 시마다 호출.
+const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus', 'creditHistory', 'creditQuote', 'getAnnouncements', 'getActiveBlogPrompt', ...ADMIN_ACTIONS];
 
 // 액션키별 기본 크레딧 소모량 — config_credit_costs 테이블에 값이 있으면 그쪽이 우선(코드 재배포
 // 없이 D1 값만 바꿔 조정 가능, 기존 구글시트 config 표와 동일한 우선순위 패턴). 없을 때만 기본값 사용.
@@ -860,6 +861,181 @@ async function adminSetValidationDecision(env, id, decision, note) {
   return { ok: true };
 }
 
+// ── 블로그 작성 프롬프트 버전 관리(2026-09-03) ──────────────────────────
+// blog.js에 하드코딩됐던 프롬프트 본문을 D1로 옮겨서, 관리자가 코드 배포 없이 버전을
+// 즉시 전환·롤백할 수 있게 한다. AI가 새 버전을 제안해도 status='draft'로만 들어가고,
+// 관리자가 명시적으로 활성화해야 실제 글쓰기에 쓰인다(자동 적용 금지 원칙 유지).
+
+// 모든 로그인 사용자가 글 작성 시마다 호출(blog.js의 blogEnsurePromptLoaded).
+async function getActiveBlogPrompt(env) {
+  const row = await env.DB.prepare(
+    "SELECT version_label, draft_technical, final_system, type_rules_json FROM prompt_versions WHERE status = 'active' ORDER BY id DESC LIMIT 1"
+  ).first();
+  if (!row) return { ok: false, error: '활성 프롬프트 버전이 없습니다.' };
+  let typeRules = {};
+  try { typeRules = JSON.parse(row.type_rules_json || '{}'); } catch (e) {}
+  return { ok: true, versionLabel: row.version_label, draftTechnical: row.draft_technical, finalSystem: row.final_system, typeRules };
+}
+
+async function adminListPromptVersions(env) {
+  const { results } = await env.DB.prepare(
+    'SELECT id, version_label, created_at, source, status, based_on_id, change_summary, activated_at, activated_by FROM prompt_versions ORDER BY id DESC LIMIT 50'
+  ).all();
+  const versions = [];
+  for (const r of results) {
+    const countRow = await env.DB.prepare('SELECT COUNT(*) AS c FROM blog_posts WHERE prompt_version = ?').bind(r.version_label).first();
+    versions.push({
+      id: r.id, versionLabel: r.version_label, createdAt: rowDateKST(r.created_at), source: r.source, status: r.status,
+      basedOnId: r.based_on_id, changeSummary: r.change_summary || '',
+      activatedAt: r.activated_at ? rowDateKST(r.activated_at) : '', activatedBy: r.activated_by || '',
+      postCount: (countRow && countRow.c) || 0
+    });
+  }
+  return { ok: true, versions };
+}
+
+async function adminGetPromptVersionDetail(env, id) {
+  if (!id) return { ok: false, error: 'id가 필요합니다.' };
+  const row = await env.DB.prepare(
+    'SELECT id, version_label, draft_technical, final_system, type_rules_json, change_summary, status FROM prompt_versions WHERE id = ?'
+  ).bind(id).first();
+  if (!row) return { ok: false, error: '해당 버전을 찾을 수 없습니다.' };
+  return { ok: true, versionLabel: row.version_label, draftTechnical: row.draft_technical, finalSystem: row.final_system, typeRulesJson: row.type_rules_json, changeSummary: row.change_summary || '', status: row.status };
+}
+
+async function adminActivatePromptVersion(env, id, activatedBy) {
+  if (!id) return { ok: false, error: 'id가 필요합니다.' };
+  const row = await env.DB.prepare('SELECT id FROM prompt_versions WHERE id = ?').bind(id).first();
+  if (!row) return { ok: false, error: '해당 버전을 찾을 수 없습니다.' };
+  await env.DB.prepare("UPDATE prompt_versions SET status = 'archived' WHERE status = 'active'").run();
+  await env.DB.prepare("UPDATE prompt_versions SET status = 'active', activated_at = ?, activated_by = ? WHERE id = ?").bind(nowKST(), activatedBy || '', id).run();
+  return { ok: true };
+}
+
+// 현재 활성 버전으로 작성된 글들의 1계층(규칙)·2계층(AI 검증) 문제를 모아 AI에게 프롬프트
+// 개선안을 만들게 한다. 결과는 항상 status='draft'로만 저장 — 관리자가 "활성화" 눌러야 쓰인다.
+async function adminGenerateAiPromptRevision(env) {
+  const active = await env.DB.prepare("SELECT * FROM prompt_versions WHERE status = 'active' ORDER BY id DESC LIMIT 1").first();
+  if (!active) return { ok: false, error: '활성 프롬프트 버전이 없습니다.' };
+
+  const { results: posts } = await env.DB.prepare(
+    'SELECT id, title, body, tags, target_length FROM blog_posts WHERE prompt_version = ? ORDER BY id DESC LIMIT 40'
+  ).bind(active.version_label).all();
+  if (!posts.length) return { ok: false, error: '이 프롬프트 버전으로 작성된 글이 아직 없어 분석할 데이터가 없습니다.' };
+
+  const tier1 = { total: posts.length, statusCounts: { PASS: 0, REVISE: 0, HOLD: 0 }, categoryCounts: {}, examples: [] };
+  posts.forEach((r) => {
+    const v = ruleCheckPost({ title: r.title || '', body: r.body || '', tags: r.tags || '', targetLength: r.target_length || '' });
+    tier1.statusCounts[v.status] = (tier1.statusCounts[v.status] || 0) + 1;
+    v.issues.forEach((i) => {
+      if (i.severity === 'INFO') return;
+      tier1.categoryCounts[i.category] = (tier1.categoryCounts[i.category] || 0) + 1;
+      if (tier1.examples.length < 8) tier1.examples.push('[' + i.severity + '/' + i.category + '] ' + i.message);
+    });
+  });
+
+  const postIds = posts.map((p) => p.id);
+  let tier2Examples = [];
+  if (postIds.length) {
+    const placeholders = postIds.map(() => '?').join(',');
+    const { results: aiRows } = await env.DB.prepare(
+      'SELECT result_json FROM post_ai_validations WHERE post_id IN (' + placeholders + ') ORDER BY id DESC LIMIT 10'
+    ).bind(...postIds).all();
+    aiRows.forEach((r) => {
+      try {
+        const parsed = JSON.parse(r.result_json || '{}');
+        (parsed.issues || []).forEach((i) => {
+          if (i.severity === 'INFO' || tier2Examples.length >= 10) return;
+          tier2Examples.push('[' + i.severity + '/' + i.category + '] ' + (i.reason || i.original_text || ''));
+        });
+      } catch (e) {}
+    });
+  }
+
+  const cfg = await getActiveProviderConfig(env);
+  if (!cfg.ok) return cfg;
+
+  const systemPrompt = '당신은 블로그 생성 프롬프트를 개선하는 프롬프트 엔지니어다. 아래는 현재 활성 프롬프트(draft_technical, final_system, type_rules)와, 이 프롬프트로 실제 작성된 글들에서 반복적으로 발견된 문제 목록이다.\n\n'
+    + '목표: 문제를 줄이는 방향으로 draft_technical, final_system, type_rules를 개선하되, 다음을 반드시 지켜라.\n'
+    + '1. draft_technical 안의 자리표시자 {{TYPE_RULES}}, {{USER_STYLE}}, {{LENGTH_GUIDE}}는 정확히 그 문자열 그대로 남겨야 한다(대소문자·중괄호 포함, 절대 다른 문구로 바꾸지 마라). 코드가 이 문자열을 찾아 치환하므로, 하나라도 빠지거나 바뀌면 그 자리가 빈 채로 나가 프롬프트가 깨진다.\n'
+    + '2. final_system 안의 {{학원명}}, {{키워드}}, {{과목}}, {{대상}}, {{웹사이트}}, {{목표분량}}, {{연락처}}, {{지도링크}}도 마찬가지로 정확히 보존해야 한다.\n'
+    + '3. type_rules는 원래 있던 키(글 유형 이름)를 그대로 유지하고, 값(설명 문자열)만 개선한다. 키를 추가하거나 빼지 마라.\n'
+    + '4. 문제가 반복되지 않는 항목은 억지로 바꾸지 마라 — 실제 반복된 문제만 겨냥해서 최소한으로 수정한다.\n'
+    + '5. change_summary에 "무엇을, 왜 바꿨는지"를 2~4문장으로 명확히 적어라(관리자가 이 요약만 보고 활성화 여부를 결정한다).\n\n'
+    + '반드시 아래 JSON 형식으로만 응답하라:\n'
+    + '{"change_summary":"...","draft_technical":"...","final_system":"...","type_rules":{"교육칼럼":"...","입시정보":"...","학원홍보":"...","합격인터뷰":"...","수학정보":"...","이벤트안내":"...","학원공지":"..."}}';
+
+  const userContent = [
+    '## 현재 활성 프롬프트 버전: ' + active.version_label,
+    '',
+    '### draft_technical',
+    active.draft_technical,
+    '',
+    '### final_system',
+    active.final_system,
+    '',
+    '### type_rules',
+    active.type_rules_json,
+    '',
+    '## 이 버전으로 작성된 글 ' + tier1.total + '건 중 규칙 검사 결과',
+    'PASS ' + tier1.statusCounts.PASS + ' / REVISE ' + tier1.statusCounts.REVISE + ' / HOLD ' + tier1.statusCounts.HOLD,
+    '카테고리별 발생 건수: ' + JSON.stringify(tier1.categoryCounts),
+    '문제 예시:',
+    tier1.examples.join('\n') || '(없음)',
+    '',
+    'AI 내용 검증(2계층)에서 발견된 문제 예시:',
+    tier2Examples.join('\n') || '(검증 이력 없음)'
+  ].join('\n');
+
+  async function attempt(maxTokens) {
+    const r = await runWithGenLock(env, () => callAiRelay(env, {
+      provider: cfg.provider, apiKey: cfg.apiKey, models: cfg.models,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userContent }],
+      max_tokens: maxTokens
+    }));
+    if (!r.ok) return { text: '', raw: r };
+    const t = (r.data && r.data.content && r.data.content[0] && r.data.content[0].text) || r.text || '';
+    return { text: t, raw: r };
+  }
+
+  let tokens = 8000;
+  let text = '', raw = { ok: false };
+  for (let i = 0; i < 3; i++) {
+    ({ text, raw } = await attempt(tokens));
+    if (text) break;
+    if (!raw.ok) { if (i < 2) await sleep(3000 * (i + 1)); }
+    else tokens = Math.min(tokens * 2, 16000);
+  }
+  if (!raw.ok) return raw;
+  if (!text) return { ok: false, error: 'AI로부터 빈 응답을 받았습니다(재시도 후에도 실패).' };
+
+  let parsed;
+  try {
+    parsed = extractJson(text);
+  } catch (e) {
+    return { ok: false, error: 'AI 응답 JSON 파싱 실패 — 원문 앞부분: ' + text.slice(0, 300) };
+  }
+
+  // 자리표시자가 하나라도 빠지면 그 자리가 빈 채로 나가 실서비스가 깨지므로, draft로도
+  // 저장하지 않고 여기서 막는다 — 관리자가 활성화할 기회조차 주지 않는다.
+  const missingDraft = ['{{TYPE_RULES}}', '{{USER_STYLE}}', '{{LENGTH_GUIDE}}'].filter((p) => !String(parsed.draft_technical || '').includes(p));
+  const missingFinal = ['{{학원명}}', '{{목표분량}}'].filter((p) => !String(parsed.final_system || '').includes(p));
+  if (missingDraft.length || missingFinal.length) {
+    return { ok: false, error: 'AI가 제안한 프롬프트에 필수 자리표시자가 빠져 있어 저장을 거부했습니다: ' + missingDraft.concat(missingFinal).join(', ') };
+  }
+  if (!parsed.type_rules || typeof parsed.type_rules !== 'object') {
+    return { ok: false, error: 'AI 응답에 type_rules가 없어 저장을 거부했습니다.' };
+  }
+
+  const newLabel = active.version_label.replace(/^v(\d+)-.*/, (m, n) => 'v' + (parseInt(n, 10) + 1)) + '-ai-auto-' + nowKST().slice(0, 10);
+  const insertRes = await env.DB.prepare(
+    'INSERT INTO prompt_versions (version_label, created_at, source, status, based_on_id, change_summary, draft_technical, final_system, type_rules_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(newLabel, nowKST(), 'ai_auto', 'draft', active.id, parsed.change_summary || '', parsed.draft_technical, parsed.final_system, JSON.stringify(parsed.type_rules)).run();
+
+  return { ok: true, id: insertRes.meta.last_row_id, versionLabel: newLabel, changeSummary: parsed.change_summary || '' };
+}
+
 async function adminDeletePost(env, id) {
   if (!id) return { ok: false, error: 'id가 필요합니다.' };
   await env.DB.prepare('DELETE FROM blog_posts WHERE id=?').bind(id).run();
@@ -967,6 +1143,10 @@ export default {
         if (data.action === 'adminValidatePostAI') return aiJsonResponse(await adminValidatePostAI(env, data.targetId || ''));
         if (data.action === 'adminGetPostValidations') return jsonResponse(await adminGetPostValidations(env, data.targetId || ''));
         if (data.action === 'adminSetValidationDecision') return jsonResponse(await adminSetValidationDecision(env, data.targetId || '', data.decision || '', data.note || ''));
+        if (data.action === 'adminListPromptVersions') return jsonResponse(await adminListPromptVersions(env));
+        if (data.action === 'adminGetPromptVersionDetail') return jsonResponse(await adminGetPromptVersionDetail(env, data.targetId || ''));
+        if (data.action === 'adminActivatePromptVersion') return jsonResponse(await adminActivatePromptVersion(env, data.targetId || '', data.userId || ''));
+        if (data.action === 'adminGenerateAiPromptRevision') return aiJsonResponse(await adminGenerateAiPromptRevision(env));
         if (data.action === 'adminListUsers') return jsonResponse(await adminListUsers(env));
         if (data.action === 'adminUpdateUser') return jsonResponse(await adminUpdateUser(env, data.targetId || '', data.patch || {}));
         if (data.action === 'adminApproveUser') return jsonResponse(await adminApproveUser(env, data.targetId || ''));
@@ -983,6 +1163,7 @@ export default {
         if (data.action === 'loadSchoolShare') return jsonResponse(await loadSchoolShare(env, data.userId));
         if (data.action === 'saveSchoolShare') return jsonResponse(await saveSchoolShare(env, data.userId, data.jsonData || ''));
         if (data.action === 'schoolShareSearch') return jsonResponse(await schoolShareSearch(env, data.sidoCode || '', data.sggCode || '', data.schulKndCode || ''));
+        if (data.action === 'getActiveBlogPrompt') return jsonResponse(await getActiveBlogPrompt(env));
         if (data.action === 'useCredit') return jsonResponse(await useCredit(env, data.userId, data.actionKey || ''));
         if (data.action === 'creditStatus') return jsonResponse(await getCreditStatus(env, data.userId));
         if (data.action === 'creditHistory') return jsonResponse(await getCreditHistory(env, data.userId, data.n || 50));

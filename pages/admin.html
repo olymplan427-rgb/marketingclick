@@ -67,6 +67,41 @@
 
       <div class="tool-section">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div class="sec-title" style="margin:0;">블로그 작성 프롬프트 버전 관리</div>
+          <button class="btn btn-primary" id="admin-prompt-ai-gen-btn" onclick="adminRunGenerateAiPromptRevision(this)">AI 개선안 생성 (호출당 비용 발생)</button>
+        </div>
+        <div style="font-size:12px;color:var(--mut);margin-bottom:10px;">활성 버전으로 작성된 글들의 검증 결과(규칙 위반·AI 평가)를 분석해 프롬프트 개선안을 만듭니다. 새 버전은 항상 "검토 대기" 상태로만 생성되며, 아래에서 직접 "활성화"를 눌러야 실제 글쓰기에 반영됩니다 — 이상해지면 이전 버전을 다시 활성화해 즉시 되돌릴 수 있습니다.</div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--bdr);color:var(--mut);text-align:left;">
+                <th style="padding:10px;">버전</th>
+                <th style="padding:10px;width:80px;">출처</th>
+                <th style="padding:10px;width:80px;">상태</th>
+                <th style="padding:10px;width:70px;">글 수</th>
+                <th style="padding:10px;">변경 요약</th>
+                <th style="padding:10px;width:140px;">활성화 시각</th>
+                <th style="padding:10px;width:160px;"></th>
+              </tr>
+            </thead>
+            <tbody id="admin-prompt-version-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 프롬프트 버전 본문 미리보기 팝업 -->
+      <div class="ms-modal-overlay" id="admin-prompt-modal" style="display:none;" onclick="if(event.target===this) adminClosePromptModal()">
+        <div class="ms-modal-box" style="max-width:800px;">
+          <div class="ms-modal-header">
+            <div class="ms-modal-title" id="admin-prompt-modal-title"></div>
+            <button class="ms-modal-close" onclick="adminClosePromptModal()">✕</button>
+          </div>
+          <div class="ms-modal-body" id="admin-prompt-modal-body"></div>
+        </div>
+      </div>
+
+      <div class="tool-section">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <div class="sec-title" style="margin:0;">블로그 글 관리 (전체 사용자)</div>
           <input class="blog-input" id="admin-post-filter" placeholder="아이디·제목으로 검색" style="width:240px;" oninput="adminRenderPosts()">
         </div>
