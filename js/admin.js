@@ -1,7 +1,7 @@
 // 관리자 페이지 — AI 프로바이더 키/모델, 기능별 크레딧 비용, 사용자 관리(D1 직접 반영).
 // 서버(blog-tracker Worker)가 role==='관리자' 아니면 모든 admin* 액션을 거부하므로,
 // 여기서는 sidebar 노출 + 편의 UI만 담당(applyAdminVisibility는 js/common.js).
-var adminState = { config: null, users: [], notices: [], posts: [], selectedPostId: null, validationSummary: [], validationNote: '' };
+var adminState = { config: null, users: [], notices: [], posts: [], selectedPostId: null, validationSummary: [], validationNote: '', promptVersionFilter: '' };
 
 function adminEsc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -253,17 +253,28 @@ function adminRenderPosts() {
   if (!body) return;
   var filterEl = document.getElementById('admin-post-filter');
   var filter = filterEl ? filterEl.value.trim().toLowerCase() : '';
+  var pvFilter = adminState.promptVersionFilter;
   var list = adminState.posts.filter(function(p) {
+    if (pvFilter && (p.promptVersion || '(미기록)') !== pvFilter) return false;
     if (!filter) return true;
     return (p.userId || '').toLowerCase().indexOf(filter) !== -1 || (p.title || '').toLowerCase().indexOf(filter) !== -1;
   });
-  if (!list.length) { body.innerHTML = '<tr><td colspan="6" style="padding:10px;color:var(--mut);">글이 없습니다.</td></tr>'; return; }
+  var pvBannerEl = document.getElementById('admin-post-pv-filter-banner');
+  if (pvBannerEl) {
+    pvBannerEl.innerHTML = pvFilter
+      ? '<div style="font-size:12px;background:var(--acc-light);color:var(--acc);border-radius:6px;padding:6px 10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">'
+        + '프롬프트 버전 <strong>' + adminEsc(pvFilter) + '</strong>만 표시 중 (' + list.length + '건)'
+        + '<button class="btn" onclick="adminClearPromptVersionFilter()" style="padding:2px 8px;">필터 해제</button></div>'
+      : '';
+  }
+  if (!list.length) { body.innerHTML = '<tr><td colspan="7" style="padding:10px;color:var(--mut);">글이 없습니다.</td></tr>'; return; }
   body.innerHTML = list.map(function(p) {
     return '<tr style="border-bottom:1px solid var(--bdr);">'
       + '<td style="padding:10px;font-weight:700;">' + adminEsc(p.userId) + '</td>'
       + '<td style="padding:10px;color:var(--mut);">' + adminEsc(p.date) + '</td>'
       + '<td style="padding:10px;">' + adminEsc(p.title) + '</td>'
       + '<td style="padding:10px;color:var(--mut);">' + adminEsc(p.type) + '</td>'
+      + '<td style="padding:10px;color:var(--mut);font-size:11.5px;">' + adminEsc(p.promptVersion || '(미기록)') + '</td>'
       + '<td style="padding:10px;">' + adminValidationBadge(p.validation) + '</td>'
       + '<td style="padding:10px;white-space:nowrap;">'
         + '<button class="btn" onclick="adminTogglePostDetail(' + p.id + ')">보기</button> '
@@ -271,6 +282,17 @@ function adminRenderPosts() {
       + '</td>'
     + '</tr>';
   }).join('');
+}
+
+function adminFilterByPromptVersion(promptVersion) {
+  adminState.promptVersionFilter = promptVersion;
+  adminRenderPosts();
+  var body = document.getElementById('admin-post-body');
+  if (body) body.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function adminClearPromptVersionFilter() {
+  adminState.promptVersionFilter = '';
+  adminRenderPosts();
 }
 
 var ADMIN_VALIDATION_STATUS_STYLE = {
@@ -295,8 +317,8 @@ function adminRenderValidationSummary() {
   if (!summary.length) { el.innerHTML = note; return; }
   var rows = summary.map(function(v) {
     var cats = Object.keys(v.categoryCounts || {}).map(function(c) { return c + ' ' + v.categoryCounts[c]; }).join(', ') || '없음';
-    return '<tr style="border-bottom:1px solid var(--bdr);">'
-      + '<td style="padding:7px 10px;font-weight:700;">' + adminEsc(v.promptVersion) + '</td>'
+    return '<tr style="border-bottom:1px solid var(--bdr);cursor:pointer;" onclick="adminFilterByPromptVersion(\'' + adminEsc(v.promptVersion).replace(/'/g, "\\'") + '\')" title="클릭하면 이 버전 글만 아래 목록에서 필터링됩니다">'
+      + '<td style="padding:7px 10px;font-weight:700;text-decoration:underline;">' + adminEsc(v.promptVersion) + '</td>'
       + '<td style="padding:7px 10px;">' + v.total + '건</td>'
       + '<td style="padding:7px 10px;color:#1e7a34;">PASS ' + (v.statusCounts.PASS || 0) + '</td>'
       + '<td style="padding:7px 10px;color:#8a5a00;">REVISE ' + (v.statusCounts.REVISE || 0) + '</td>'
@@ -305,7 +327,7 @@ function adminRenderValidationSummary() {
     + '</tr>';
   }).join('');
   el.innerHTML = note
-    + '<div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:6px;">프롬프트 버전별 검증 현황 (이 버전에서 반복되는 문제를 보고 blog.js를 고칠지 판단하세요)</div>'
+    + '<div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:6px;">프롬프트 버전별 검증 현황 (행을 클릭하면 아래 글 목록이 그 버전만 필터링됩니다 — 반복되는 문제를 보고 blog.js를 고칠지 판단하세요)</div>'
     + '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
     + '<thead><tr style="border-bottom:1px solid var(--bdr);color:var(--mut);text-align:left;"><th style="padding:7px 10px;">프롬프트 버전</th><th style="padding:7px 10px;">건수</th><th style="padding:7px 10px;" colspan="3">상태</th><th style="padding:7px 10px;">문제 카테고리별 건수</th></tr></thead>'
     + '<tbody>' + rows + '</tbody></table></div>';
