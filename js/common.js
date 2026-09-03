@@ -95,6 +95,8 @@ function _applyPage(id) {
       blogGoStep(blogState.step || 1);
     } else if (id === 'blog-history') {
       blogHistoryInit();
+    } else if (id === 'blog-news') {
+      if (typeof regionTopicsInit === 'function') regionTopicsInit();
     }
   } else if (id === 'settings-prompt' || id === 'settings-instagram') {
     document.getElementById('page-settings').classList.add('active');
