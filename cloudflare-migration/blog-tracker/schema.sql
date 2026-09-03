@@ -93,3 +93,19 @@ CREATE TABLE IF NOT EXISTS gen_lock (
   acquired_at INTEGER
 );
 INSERT OR IGNORE INTO gen_lock (id, holder, acquired_at) VALUES (1, NULL, NULL);
+
+-- 블로그 글 검증 2계층(AI 내용 검증) 결과. 기존 결과를 덮어쓰지 않고 매 검증마다
+-- 새 행을 추가해 이력을 남긴다(기준서 8장). 관리자 승인/무시 메모도 여기에 함께 저장.
+CREATE TABLE IF NOT EXISTS post_ai_validations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id INTEGER,
+  created_at TEXT,
+  model TEXT,
+  standard_version TEXT,
+  final_status TEXT,
+  total_score INTEGER,
+  result_json TEXT,
+  admin_decision TEXT,
+  admin_note TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_post_ai_validations_post ON post_ai_validations(post_id);

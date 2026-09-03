@@ -352,16 +352,98 @@ function adminRenderValidationIssues(validation) {
 function adminTogglePostDetail(id) {
   var post = adminState.posts.filter(function(p) { return p.id === id; })[0];
   if (!post) return;
+  adminState.selectedPostId = id;
   document.getElementById('admin-post-modal-title').textContent = post.userId + ' · ' + post.date + ' · ' + post.type;
   document.getElementById('admin-post-modal-body').innerHTML =
     '<div style="font-size:15px;font-weight:800;color:var(--txt);margin-bottom:10px;">' + adminEsc(post.title) + '</div>'
     + adminRenderValidationIssues(post.validation)
+    + '<div style="margin-bottom:14px;">'
+      + '<button class="btn" id="admin-ai-validate-btn" onclick="adminRunAiValidation(' + id + ', this)">AI 검증 실행 (2계층 — 호출당 비용 발생)</button>'
+    + '</div>'
+    + '<div id="admin-ai-validation-area" style="margin-bottom:14px;"><p style="font-size:12px;color:var(--mut);">AI 검증 이력을 불러오는 중...</p></div>'
     + '<div style="font-size:13px;color:var(--txt);line-height:1.7;white-space:pre-wrap;">' + adminEsc(post.body) + '</div>';
   document.getElementById('admin-post-modal').style.display = 'flex';
+  adminLoadPostValidations(id);
+}
+
+async function adminLoadPostValidations(id) {
+  var area = document.getElementById('admin-ai-validation-area');
+  if (!area) return;
+  try {
+    var items = await adminGetPostValidations(id);
+    if (!items.length) { area.innerHTML = '<p style="font-size:12px;color:var(--mut);">아직 AI 검증 이력이 없습니다.</p>'; return; }
+    area.innerHTML = items.map(adminRenderAiValidationEntry).join('');
+  } catch (e) {
+    area.innerHTML = '<p style="font-size:12px;color:#a51d1d;">이력을 불러오지 못했습니다: ' + adminEsc(e.message || '') + '</p>';
+  }
+}
+
+async function adminRunAiValidation(id, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'AI 검증 중... (최대 1~2분 소요될 수 있음)'; }
+  try {
+    await adminValidatePostAI(id);
+    await adminLoadPostValidations(id);
+  } catch (e) {
+    alert('AI 검증 실패: ' + (e.message || ''));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'AI 검증 실행 (2계층 — 호출당 비용 발생)'; }
+  }
+}
+
+function adminRenderAiValidationEntry(item) {
+  var r = item.result || {};
+  var s = ADMIN_VALIDATION_STATUS_STYLE[r.final_status] || { label: r.final_status || '?', bg: '#eee', fg: '#374151' };
+  var scores = r.scores || {};
+  var scoreRow = ['factual_safety', 'math_curriculum', 'title_search_intent', 'logic_practicality', 'style_readability', 'brand_fit', 'cta']
+    .map(function(k) { return k + ' ' + (scores[k] != null ? scores[k] : '-'); }).join(' · ');
+  var issues = (r.issues || []).map(function(i) {
+    var color = { BLOCKER: '#a51d1d', MAJOR: '#c2740b', MINOR: '#6b7280', INFO: '#9aa1ad' }[i.severity] || '#6b7280';
+    return '<div style="font-size:12.5px;line-height:1.6;padding:6px 0;border-bottom:1px solid var(--bdr);">'
+      + '<span style="color:' + color + ';font-weight:800;">[' + adminEsc(i.severity) + ']</span> <span style="color:var(--mut);">' + adminEsc(i.category) + '</span><br>'
+      + '<span style="color:var(--txt);">문제: ' + adminEsc(i.original_text || '') + '</span><br>'
+      + '<span style="color:var(--txt);">이유: ' + adminEsc(i.reason || '') + '</span><br>'
+      + (i.suggested_revision ? '<span style="color:#1e7a34;">수정안: ' + adminEsc(i.suggested_revision) + '</span>' : '')
+    + '</div>';
+  }).join('') || '<div style="font-size:12px;color:var(--mut);">발견된 문제 없음</div>';
+  var claims = (r.claims || []).map(function(c) {
+    return '<div style="font-size:12px;color:var(--mut);">· [' + adminEsc(c.verification_status) + '] ' + adminEsc(c.claim) + (c.note ? ' — ' + adminEsc(c.note) : '') + '</div>';
+  }).join('');
+  var strengths = (r.strengths || []).map(function(s2) { return '<div style="font-size:12px;color:#1e7a34;">· ' + adminEsc(s2) + '</div>'; }).join('');
+  var missing = (r.missing_inputs || []).length ? '<div style="font-size:12px;color:var(--mut);margin-top:6px;">입력 부족: ' + adminEsc((r.missing_inputs || []).join(', ')) + '</div>' : '';
+  var decisionRow = '<div style="margin-top:8px;display:flex;gap:6px;align-items:center;">'
+    + '<span style="font-size:11.5px;color:var(--mut);">관리자 처리: ' + adminEsc(item.adminDecision || '미처리') + (item.adminNote ? ' (' + adminEsc(item.adminNote) + ')' : '') + '</span>'
+    + '<button class="btn" style="padding:2px 8px;font-size:11px;" onclick="adminDecideValidation(' + item.id + ', \'approved\')">승인</button>'
+    + '<button class="btn" style="padding:2px 8px;font-size:11px;" onclick="adminDecideValidation(' + item.id + ', \'dismissed\')">무시</button>'
+  + '</div>';
+  return '<div style="border:1px solid var(--bdr);border-radius:8px;padding:12px;margin-bottom:10px;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+      + '<span style="display:inline-block;background:' + s.bg + ';color:' + s.fg + ';border-radius:20px;padding:3px 9px;font-size:11px;font-weight:800;">' + adminEsc(r.final_status || '?') + ' · ' + (r.total_score != null ? r.total_score : '-') + '점</span>'
+      + '<span style="font-size:11px;color:var(--mut);">' + adminEsc(item.createdAt) + ' · ' + adminEsc(item.model) + ' · ' + adminEsc(item.standardVersion) + '</span>'
+    + '</div>'
+    + '<div style="font-size:12.5px;color:var(--txt);margin-bottom:6px;">' + adminEsc(r.summary || '') + '</div>'
+    + '<div style="font-size:11px;color:var(--mut);margin-bottom:8px;">' + scoreRow + '</div>'
+    + issues
+    + (claims ? '<div style="margin-top:8px;font-size:12px;font-weight:700;color:var(--txt);">확인 필요 주장</div>' + claims : '')
+    + (strengths ? '<div style="margin-top:8px;font-size:12px;font-weight:700;color:var(--txt);">잘된 점</div>' + strengths : '')
+    + missing
+    + decisionRow
+  + '</div>';
+}
+
+async function adminDecideValidation(validationId, decision) {
+  var note = '';
+  if (decision === 'dismissed') note = prompt('무시 사유(선택, 비워도 됨):') || '';
+  try {
+    await adminSetValidationDecision(validationId, decision, note);
+    if (adminState.selectedPostId != null) adminLoadPostValidations(adminState.selectedPostId);
+  } catch (e) {
+    alert('처리 실패: ' + (e.message || ''));
+  }
 }
 
 function adminCloseModal() {
   document.getElementById('admin-post-modal').style.display = 'none';
+  adminState.selectedPostId = null;
 }
 
 async function adminDeletePostRow(id) {

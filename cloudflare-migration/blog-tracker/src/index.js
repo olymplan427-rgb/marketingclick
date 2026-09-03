@@ -2,7 +2,7 @@
 // Sheets API 왕복이 없어지고, Worker 내부에서 로컬 SQLite 쿼리로 끝나 응답 속도가 크게 개선됨.
 // 클라이언트(js/common.js)는 전혀 수정 불필요 — 액션/응답 형태 100% 동일하게 유지.
 import { sendMail } from './mail.js';
-const ADMIN_ACTIONS = ['adminListUsers', 'adminUpdateUser', 'adminApproveUser', 'adminGetConfig', 'adminSetConfigValue', 'adminSetModels', 'adminSetCreditCost', 'adminAddAnnouncement', 'adminUpdateAnnouncement', 'adminDeleteAnnouncement', 'adminListPosts', 'adminDeletePost'];
+const ADMIN_ACTIONS = ['adminListUsers', 'adminUpdateUser', 'adminApproveUser', 'adminGetConfig', 'adminSetConfigValue', 'adminSetModels', 'adminSetCreditCost', 'adminAddAnnouncement', 'adminUpdateAnnouncement', 'adminDeleteAnnouncement', 'adminListPosts', 'adminDeletePost', 'adminValidatePostAI', 'adminGetPostValidations', 'adminSetValidationDecision'];
 const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus', 'creditHistory', 'creditQuote', 'getAnnouncements', ...ADMIN_ACTIONS];
 
 // 액션키별 기본 크레딧 소모량 — config_credit_costs 테이블에 값이 있으면 그쪽이 우선(코드 재배포
@@ -425,17 +425,24 @@ async function callAiRelay(env, body) {
   }
 }
 
-// 활성 프로바이더(키가 채워진 첫 프로바이더)로 1회 호출.
-// gemini가 활성인 경우에만 config의 모델 목록 전체를 폴백용으로 함께 넘긴다.
-async function claudeProxy(env, payload) {
+// claudeProxy/adminValidatePostAI가 공유하는 "지금 활성 프로바이더가 뭔지" 조회 로직.
+async function getActiveProviderConfig(env) {
   const configRows = await getAllConfigRows(env);
   const provider = pickActiveProviderRows(configRows);
   const apiKey = (configRows[AI_KEY_PROP[provider]] || {}).value;
   if (!apiKey) return { ok: false, error: 'config에 ' + AI_KEY_PROP[provider] + ' 값이 아직 입력되지 않았습니다.' };
   const model = (configRows[AI_KEY_PROP[provider]] || {}).model || AI_DEFAULT_MODEL[provider];
   const models = provider === 'gemini' ? [model, ...(await getModelListForProvider(env, provider)).filter((m) => m !== model)] : [model];
+  return { ok: true, provider, apiKey, models };
+}
+
+// 활성 프로바이더(키가 채워진 첫 프로바이더)로 1회 호출.
+// gemini가 활성인 경우에만 config의 모델 목록 전체를 폴백용으로 함께 넘긴다.
+async function claudeProxy(env, payload) {
+  const cfg = await getActiveProviderConfig(env);
+  if (!cfg.ok) return cfg;
   return runWithGenLock(env, () => callAiRelay(env, {
-    provider, apiKey, models,
+    provider: cfg.provider, apiKey: cfg.apiKey, models: cfg.models,
     system: (payload && payload.system) || '',
     messages: (payload && payload.messages) || [],
     max_tokens: payload && payload.max_tokens
@@ -678,7 +685,136 @@ async function adminListPosts(env, n) {
     post.validation = ruleCheckPost(post);
     return post;
   });
-  return { ok: true, posts, validationSummary: summarizeByPromptVersion(posts), validationNote: '지금은 1계층(분량·금지어·서식·상투구) 규칙 검사만 자동 실행됩니다. 캠퍼스 정보 대조·AI 내용 검증·외부 사실 확인은 아직 미구현입니다.' };
+  return { ok: true, posts, validationSummary: summarizeByPromptVersion(posts), validationNote: '1계층(분량·금지어·서식·상투구) 규칙 검사는 자동 실행됩니다. 2계층(AI 내용 검증)은 글마다 "AI 검증" 버튼을 눌러 수동으로 실행하세요(크레딧과 무관하게 AI 호출 비용이 듭니다). 캠퍼스 정보 대조·외부 사실 확인(3계층)은 아직 미구현입니다.' };
+}
+
+// ── 블로그 글 검증 2계층: AI 내용·품질 검증 ─────────────────────────
+// U2M 블로그 글 검증 기준서 v1.0 5장·9장·10장 기준. 관리자가 글 하나를 선택해
+// "AI 검증" 버튼을 누를 때만 실행(전체 자동 실행은 비용이 계속 쌓이므로 배제).
+// 결과는 post_ai_validations에 매번 새 행으로 쌓아 이력을 남긴다(기존 결과를 덮어쓰지 않음).
+const AI_VALIDATION_STANDARD_VERSION = 'u2m-review-1.0';
+const AI_VALIDATION_SYSTEM_PROMPT = `당신은 올림피아드교육 유투엠(U2M) 수학학원 블로그의 발행 전 검수자다.
+
+목표는 글을 칭찬하거나 막연한 인상을 말하는 것이 아니라, 독자에게 오해를 줄 수 있는 사실·수학·교육과정 오류를 먼저 찾고 U2M 작성 기준에 따라 발행 가능 여부를 일관되게 판정하는 것이다.
+
+우선순위는 다음과 같다.
+1. 사실성, 최신성, 법적·광고상 안전
+2. 수학 및 교육과정 정확성
+3. 사용자가 지정한 글 유형, 독자, 분위기, 핵심 메시지
+4. 제목–본문 일치와 실행 가능한 정보
+5. U2M 브랜드와 한국어 문체
+6. SEO, 이모지, 형식 규칙
+
+제공되지 않은 학생 사례, 대사, 후기, 성과, 수치, 일정, 연구, 기관 정보를 사실처럼 승인하지 마라. 이 검증에는 실시간 웹 검색 도구가 없으므로, 최신 정보의 사실 여부를 직접 확인했다고 표현하지 말고 claims 배열에 SOURCE_REQUIRED 또는 UNVERIFIABLE로 표시하라. VERIFIED는 절대 사용하지 마라(외부 검색 없이는 확인 불가능하다).
+
+수학 글에서는 정의·기호·공식·예시 계산을 검토하고, 교육과정 글에서는 적용 연도와 학년, 교과서별 단원 배열 차이를 확인하라. 사실 오류, 수학 오류, 잘못된 캠퍼스·연락처, 허위 사례, 중대한 제목 오도는 BLOCKER다.
+
+U2M 문체는 친근하지만 신뢰감 있는 존댓말이다. 모든 문장을 같은 어미로 끝내지 않는다. 모바일에서 읽기 쉽게 문단을 나누고 반복·번역투·AI 상투구를 점검한다. 말하는 수학, 하브루타, 플립러닝, 메타인지 중 글의 주제와 직접 연결되는 요소가 있을 때만 하나를 선택해 언급하는 것을 허용한다.
+
+각 문제는 severity, category, original_text, reason, suggested_revision을 포함해야 한다. 원문에 없는 문제를 추측하여 만들지 마라. 점수가 높아도 BLOCKER가 있으면 final_status는 HOLD다. 문제가 거의 없으면 억지로 항목을 채우지 마라. 캠퍼스 공식 정보 등 입력받지 못한 항목은 missing_inputs에 기록하고 그 항목에 대한 판단은 하지 마라.
+
+출력은 반드시 아래 JSON 스키마만 사용하고 다른 텍스트는 포함하지 마라.
+
+{
+  "final_status": "PASS | REVISE | HOLD | NEEDS_VERIFICATION | NOT_EVALUATED",
+  "total_score": 0,
+  "summary": "핵심 진단 2~4문장",
+  "scores": { "factual_safety": 0, "math_curriculum": 0, "title_search_intent": 0, "logic_practicality": 0, "style_readability": 0, "brand_fit": 0, "cta": 0 },
+  "issues": [ { "severity": "BLOCKER | MAJOR | MINOR | INFO", "category": "FACT | MATH | CURRICULUM | TITLE | LOGIC | STYLE | BRAND | CTA | FORMAT | CONTACT", "original_text": "", "reason": "", "suggested_revision": "", "requires_external_verification": false } ],
+  "claims": [ { "claim": "", "verification_status": "SOURCE_REQUIRED | UNVERIFIABLE | NOT_REQUIRED", "note": "" } ],
+  "strengths": ["실제로 확인되는 장점"],
+  "missing_inputs": []
+}
+
+점수 필드의 최대값은 각각 25, 20, 15, 15, 10, 10, 5이며 합계는 100점이다.`;
+
+function extractJson(text) {
+  const cleaned = String(text || '').trim().replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
+  const m = cleaned.match(/\{[\s\S]*\}/);
+  return JSON.parse(m ? m[0] : cleaned);
+}
+
+async function adminValidatePostAI(env, postId) {
+  if (!postId) return { ok: false, error: 'id가 필요합니다.' };
+  const row = await env.DB.prepare(
+    'SELECT id, created_at, type, mood, topic, keywords, tags, title, body, structure, target_length, prompt_version FROM blog_posts WHERE id = ?'
+  ).bind(postId).first();
+  if (!row) return { ok: false, error: '글을 찾을 수 없습니다.' };
+
+  const cfg = await getActiveProviderConfig(env);
+  if (!cfg.ok) return cfg;
+
+  const userContent = [
+    '## 글 메타 정보',
+    '글 ID: ' + row.id,
+    '작성일: ' + (row.created_at || ''),
+    '글 유형: ' + (row.type || ''),
+    '분위기: ' + (row.mood || ''),
+    '주제: ' + (row.topic || ''),
+    '검색 키워드: ' + (row.keywords || ''),
+    '목표 분량: ' + (row.target_length || '') + '자 (공백 제외)',
+    '구조 유형: ' + (row.structure || ''),
+    '캠퍼스 공식 정보(주소/전화/URL/운영 프로그램), 참고자료·공식 출처, 기준 연도·적용 교육과정: 제공되지 않음 — 판단하지 말고 missing_inputs에 기록할 것',
+    '',
+    '## 제목',
+    row.title || '',
+    '',
+    '## 본문',
+    row.body || '',
+    '',
+    '## 태그',
+    row.tags || ''
+  ].join('\n');
+
+  const raw = await runWithGenLock(env, () => callAiRelay(env, {
+    provider: cfg.provider, apiKey: cfg.apiKey, models: cfg.models,
+    system: AI_VALIDATION_SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: userContent }],
+    max_tokens: 4096
+  }));
+  if (!raw.ok) return raw;
+  const text = (raw.data && raw.data.content && raw.data.content[0] && raw.data.content[0].text) || raw.text || '';
+  if (!text) return { ok: false, error: 'AI로부터 빈 응답을 받았습니다.' };
+
+  let parsed;
+  try {
+    parsed = extractJson(text);
+  } catch (e) {
+    return { ok: false, error: 'AI 응답 JSON 파싱 실패 — 원문 앞부분: ' + text.slice(0, 300) };
+  }
+
+  parsed.standard_version = AI_VALIDATION_STANDARD_VERSION;
+  parsed.post_id = row.id;
+  parsed.prompt_version = row.prompt_version || '';
+  parsed.reviewed_at = nowKST();
+  parsed.model = cfg.models[0];
+
+  await env.DB.prepare(
+    'INSERT INTO post_ai_validations (post_id, created_at, model, standard_version, final_status, total_score, result_json) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).bind(row.id, nowKST(), cfg.models[0], AI_VALIDATION_STANDARD_VERSION, parsed.final_status || '', parsed.total_score || 0, JSON.stringify(parsed)).run();
+
+  return { ok: true, result: parsed };
+}
+
+async function adminGetPostValidations(env, postId) {
+  if (!postId) return { ok: false, error: 'id가 필요합니다.' };
+  const { results } = await env.DB.prepare(
+    'SELECT id, created_at, model, standard_version, final_status, total_score, result_json, admin_decision, admin_note FROM post_ai_validations WHERE post_id = ? ORDER BY id DESC LIMIT 20'
+  ).bind(postId).all();
+  return {
+    ok: true,
+    items: results.map((r) => {
+      let result = {};
+      try { result = JSON.parse(r.result_json || '{}'); } catch (e) {}
+      return { id: r.id, createdAt: rowDateKST(r.created_at), model: r.model, standardVersion: r.standard_version, finalStatus: r.final_status, totalScore: r.total_score, result, adminDecision: r.admin_decision || '', adminNote: r.admin_note || '' };
+    })
+  };
+}
+
+async function adminSetValidationDecision(env, id, decision, note) {
+  if (!id) return { ok: false, error: 'id가 필요합니다.' };
+  await env.DB.prepare('UPDATE post_ai_validations SET admin_decision = ?, admin_note = ? WHERE id = ?').bind(decision || '', note || '', id).run();
+  return { ok: true };
 }
 
 async function adminDeletePost(env, id) {
@@ -785,6 +921,9 @@ export default {
         if (data.action === 'adminDeleteAnnouncement') return jsonResponse(await adminDeleteAnnouncement(env, data.targetId || ''));
         if (data.action === 'adminListPosts') return jsonResponse(await adminListPosts(env, data.n || 200));
         if (data.action === 'adminDeletePost') return jsonResponse(await adminDeletePost(env, data.targetId || ''));
+        if (data.action === 'adminValidatePostAI') return aiJsonResponse(await adminValidatePostAI(env, data.targetId || ''));
+        if (data.action === 'adminGetPostValidations') return jsonResponse(await adminGetPostValidations(env, data.targetId || ''));
+        if (data.action === 'adminSetValidationDecision') return jsonResponse(await adminSetValidationDecision(env, data.targetId || '', data.decision || '', data.note || ''));
         if (data.action === 'adminListUsers') return jsonResponse(await adminListUsers(env));
         if (data.action === 'adminUpdateUser') return jsonResponse(await adminUpdateUser(env, data.targetId || '', data.patch || {}));
         if (data.action === 'adminApproveUser') return jsonResponse(await adminApproveUser(env, data.targetId || ''));

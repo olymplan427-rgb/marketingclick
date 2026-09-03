@@ -723,6 +723,21 @@ async function adminDeletePost(targetId) {
   return _adminCall('adminDeletePost', { targetId: targetId });
 }
 
+// 2계층(AI 내용 검증) — 글 하나를 선택해 수동으로 실행. AI 호출 비용이 들어서 자동 전체
+// 실행은 하지 않는다. 결과는 서버(post_ai_validations)에 이력으로 쌓인다.
+async function adminValidatePostAI(targetId) {
+  var json = await _adminCall('adminValidatePostAI', { targetId: targetId });
+  if (!json.ok) throw new Error(json.error || 'AI 검증에 실패했습니다.');
+  return json.result;
+}
+async function adminGetPostValidations(targetId) {
+  var json = await _adminCall('adminGetPostValidations', { targetId: targetId });
+  return json.items || [];
+}
+async function adminSetValidationDecision(targetId, decision, note) {
+  return _adminCall('adminSetValidationDecision', { targetId: targetId, decision: decision, note: note });
+}
+
 // ── 기능별 on/off (flags.js가 배포 시 window.FEATURE_FLAGS 일부를 덮어씀) ──
 function applyFeatureFlags() {
   var f = window.FEATURE_FLAGS || {};
