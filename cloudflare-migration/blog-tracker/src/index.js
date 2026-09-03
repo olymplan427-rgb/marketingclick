@@ -593,7 +593,10 @@ function countOccurrences(text, needle) {
 function ruleCheckPost(p) {
   const issues = [];
   const body = p.body || '';
-  const bodyLen = body.replace(/\s/g, '').length;
+  // 목표 분량은 blog.js 프롬프트 지시와 동일하게 "공백 포함, title+본문+tags까지 합친 최종
+  // 결과물 전체" 기준으로 센다(2026-09-03 합의) — 저장된 body 컬럼은 title/tags를 포함하지
+  // 않으므로 여기서 합쳐서 계산한다.
+  const bodyLen = ((p.title || '') + '\n' + body + '\n' + (p.tags || '')).length;
   const target = parseInt(p.targetLength, 10);
 
   if (!body.trim()) {
@@ -755,7 +758,7 @@ async function adminValidatePostAI(env, postId) {
     '분위기: ' + (row.mood || ''),
     '주제: ' + (row.topic || ''),
     '검색 키워드: ' + (row.keywords || ''),
-    '목표 분량: ' + (row.target_length || '') + '자 (공백 제외)',
+    '목표 분량: ' + (row.target_length || '') + '자 (공백 포함, title+본문+tags를 합친 최종 결과물 전체 기준)',
     '구조 유형: ' + (row.structure || ''),
     '캠퍼스 공식 정보(주소/전화/URL/운영 프로그램), 참고자료·공식 출처, 기준 연도·적용 교육과정: 제공되지 않음 — 판단하지 말고 missing_inputs에 기록할 것',
     '',
