@@ -261,6 +261,10 @@ canvas{display:block;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.15);cu
 .news-source-pill{font-size:13px;padding:7px 16px;border-radius:99px;border:1px solid var(--bdr);background:#fff;color:var(--mut);cursor:pointer;transition:all .12s;font-weight:700;}
 .news-source-pill:hover{border-color:var(--acc);color:var(--acc);}
 .news-source-pill.active{background:var(--acc);color:#fff;border-color:var(--acc);}
+/* blogtab의 flex 높이 배분이 page-row까지 그대로 내려가야 blog-left의 overflow-y:auto가 동작함 —
+   news-source-news/region 래퍼가 일반 div(block)로 끼면 이 체인이 끊겨 스크롤이 죽고 레이아웃이
+   깨지는 문제가 있어(2026-09-03 실측) 같은 flex column 구조를 그대로 이어받게 함. */
+.news-source-body{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
 .mon-main{display:flex;flex:1;overflow:hidden;}
 .mon-left{width:390px;border-right:1px solid #e4e6e9;display:flex;flex-direction:column;background:#fff;overflow:hidden;flex-shrink:0;}
 .mon-left-header{padding:14px 24px 10px;border-bottom:1px solid #e4e6e9;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
