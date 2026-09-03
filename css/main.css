@@ -344,6 +344,8 @@ canvas{display:block;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.15);cu
 #page-credit, #page-admin{flex:1;overflow-y:auto;}
 .credit-content{padding:16px 24px 24px;display:flex;flex-direction:column;gap:16px;}
 .credit-badge{margin-left:auto;font-size:11px;font-weight:700;color:var(--acc);background:var(--acc-light);border:1px solid var(--acc-border);padding:2px 9px;border-radius:99px;}
+/* 크레딧이 들지 않는 메뉴 옆에 붙이는 "무료" 표시 — 액센트(보라)와 겹치지 않게 초록 계열로 구분 */
+.nav-free-badge{margin-left:auto;font-size:10px;font-weight:700;color:#16a34a;background:#dcfce7;border:1px solid #bbf7d0;padding:1px 7px;border-radius:99px;flex-shrink:0;}
 
 /* ── 설정 페이지 ── */
 #page-settings{flex:1;overflow-y:auto;}
