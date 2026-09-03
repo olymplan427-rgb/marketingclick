@@ -379,7 +379,7 @@ async function adminLoadPostValidations(id) {
 }
 
 async function adminRunAiValidation(id, btn) {
-  if (btn) { btn.disabled = true; btn.textContent = 'AI 검증 중... (최대 1~2분 소요될 수 있음)'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'AI 검증 중... (재시도 포함 최대 3분 소요될 수 있음)'; }
   try {
     await adminValidatePostAI(id);
     await adminLoadPostValidations(id);
