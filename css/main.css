@@ -46,6 +46,9 @@ body{display:flex;height:100vh;overflow:hidden;font-family:'Pretendard','Noto Sa
 .page{display:none;flex:1;flex-direction:column;overflow:hidden;}
 .page.active{display:flex;}
 .page-row{flex:1;display:flex;flex-direction:row;overflow:hidden;min-height:0;gap:16px;}
+/* 문의(page-feedback)는 blog-left/blog-right 2단 분할 없이 단일 컬럼으로 쌓기만 하므로,
+   .page의 기본 overflow:hidden 대신 페이지 자체가 스크롤되게 한다(2026-09-04). */
+#page-feedback{overflow-y:auto;overflow-x:hidden;}
 .page-topbar{height:44px;min-height:44px;padding:0 24px;display:flex;align-items:center;border-bottom:1px solid var(--bdr);background:#fff;flex-shrink:0;}
 .page-topbar-title{font-size:16px;font-weight:600;color:var(--heading);letter-spacing:-.01em;}
 
