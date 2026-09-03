@@ -2,19 +2,19 @@
   <!-- PAGE GUIDE — 베타 공개 기능 사용법. 좌측 목차 클릭 시 해당 섹션만 표시(탭 방식).
        스크린샷은 항목(단계)별로 작게 잘라서 각 설명 옆에 배치 — 큰 통짜 이미지 지양. -->
   <div class="page" id="page-guide">
-    <div class="page-topbar"><div class="page-topbar-title">사용법 가이드</div></div>
+    <div class="page-topbar"><div class="page-topbar-title">사용 가이드</div></div>
     <div class="page-row" style="overflow:hidden;">
       <div class="guide-toc-panel">
         <div style="font-size:11px;font-weight:800;color:var(--mut);padding:0 10px 8px;">목차</div>
         <div class="guide-toc-item active" onclick="guideShow('g-overview', this)">시작하기 전에</div>
-        <div class="guide-toc-item" onclick="guideShow('g-blog-write', this)">블로그 작성</div>
-        <div class="guide-toc-item" onclick="guideShow('g-blog-history', this)">작성 히스토리</div>
-        <div class="guide-toc-item" onclick="guideShow('g-blog-news', this)">뉴스 소재 추천</div>
+        <div class="guide-toc-item" onclick="guideShow('g-blog-write', this)">AI 글작성</div>
+        <div class="guide-toc-item" onclick="guideShow('g-blog-history', this)">히스토리</div>
+        <div class="guide-toc-item" onclick="guideShow('g-blog-news', this)">AI 소재추천</div>
         <div class="guide-toc-item" onclick="guideShow('g-mapsearch', this)">주변 학원 검색</div>
-        <div class="guide-toc-item" onclick="guideShow('g-report', this)">지역 트렌드 리포트</div>
-        <div class="guide-toc-item" onclick="guideShow('g-image', this)">이미지 만들기</div>
+        <div class="guide-toc-item" onclick="guideShow('g-report', this)">지역 트렌드 AI리포트</div>
+        <div class="guide-toc-item" onclick="guideShow('g-image', this)">이미지 스튜디오</div>
         <div class="guide-toc-item" onclick="guideShow('g-credit', this)">크레딧</div>
-        <div class="guide-toc-item" onclick="guideShow('g-feedback', this)">의견보내기</div>
+        <div class="guide-toc-item" onclick="guideShow('g-feedback', this)">문의</div>
       </div>
 
       <div class="blog-right" id="guide-scroll-area">
@@ -22,12 +22,12 @@
 
           <div class="guide-section" id="g-overview">
             <div class="guide-section-title">시작하기 전에</div>
-            <div class="guide-section-desc">모든 AI 기능(블로그 작성, 뉴스 소재 추천, 이미지 홍보문구, 지역 트렌드 리포트)은 <b>학원 프로필</b>을 기준으로 결과를 만듭니다. "블로그 작성" 페이지 Step 1에서 학원명·키워드·주소 등을 한 번만 입력해두면 다른 기능에서도 그대로 재사용됩니다.</div>
+            <div class="guide-section-desc">모든 AI 기능(AI 글작성, AI 소재추천, 이미지 홍보문구, 지역 트렌드 AI리포트)은 <b>학원 프로필</b>을 기준으로 결과를 만듭니다. "AI 글작성" 페이지 Step 1에서 학원명·키워드·주소 등을 한 번만 입력해두면 다른 기능에서도 그대로 재사용됩니다.</div>
             <div class="guide-tip">💡 기능마다 <b>크레딧</b>이 소모됩니다. 신규 가입 시 500 크레딧이 지급되며, 잔여량은 사이드바 "크레딧"에서 확인할 수 있어요.</div>
           </div>
 
           <div class="guide-section" id="g-blog-write" style="display:none;">
-            <div class="guide-section-title">블로그 작성</div>
+            <div class="guide-section-title">AI 글작성</div>
             <div class="guide-section-desc">주제와 키워드만 입력하면 네이버 블로그에 바로 붙여넣을 수 있는 완성 글과 이미지 추천 검색어까지 한 번에 만들어줍니다.</div>
             <div class="guide-step-row">
               <img class="guide-step-shot" src="images/guide/blog_step1_profile.png" alt="학원 프로필">
@@ -55,9 +55,9 @@
           </div>
 
           <div class="guide-section" id="g-blog-news" style="display:none;">
-            <div class="guide-section-title">뉴스 소재 추천</div>
+            <div class="guide-section-title">AI 소재추천</div>
             <div class="guide-section-desc">최근 교육 뉴스를 모아 이미 다룬 소재는 제외하고, 학원 블로그로 쓰기 좋은 주제를 AI가 추천합니다.</div>
-            <img class="guide-shot" src="images/guide/04_blog_news.png" alt="뉴스 소재 추천 화면">
+            <img class="guide-shot" src="images/guide/04_blog_news.png" alt="AI 소재추천 화면">
             <div class="guide-steps">
               <div class="guide-step"><span class="guide-num">1</span>"최근 교육 뉴스 불러와 주제 추천받기" 버튼을 누릅니다.</div>
               <div class="guide-step"><span class="guide-num">2</span>추천된 주제 목록에서 마음에 드는 것을 클릭해 상세 내용을 확인합니다.</div>
@@ -88,7 +88,7 @@
           </div>
 
           <div class="guide-section" id="g-report" style="display:none;">
-            <div class="guide-section-title">지역 트렌드 리포트</div>
+            <div class="guide-section-title">지역 트렌드 AI리포트</div>
             <div class="guide-section-desc">우리 학원이 속한 지역(구/군/시)의 수학학원들이 최근 3개월간 진행한 이벤트·이슈를 블로그에서 모아 트렌드와 콘텐츠 주제까지 정리합니다.</div>
             <div class="guide-step-row">
               <img class="guide-step-shot" src="images/guide/report_step1_region.png" alt="조회 지역">
@@ -102,7 +102,7 @@
           </div>
 
           <div class="guide-section" id="g-image" style="display:none;">
-            <div class="guide-section-title">이미지 만들기 (성적우수)</div>
+            <div class="guide-section-title">이미지 스튜디오 (성적우수)</div>
             <div class="guide-section-desc">배경을 고르고 합격자 명단을 붙여넣으면 인스타그램 게시용 성적우수 이미지가 바로 완성됩니다.</div>
             <div class="guide-step-row">
               <img class="guide-step-shot" src="images/guide/img_step1_bg.png" alt="배경 선택">
@@ -132,7 +132,7 @@
           </div>
 
           <div class="guide-section" id="g-feedback" style="display:none;">
-            <div class="guide-section-title">의견보내기</div>
+            <div class="guide-section-title">문의</div>
             <div class="guide-section-desc">불편한 점, 개선 아이디어, 버그를 관리자에게 직접 전달할 수 있는 게시판입니다. 작성한 글은 본인과 관리자만 볼 수 있습니다.</div>
             <div class="guide-step-row">
               <img class="guide-step-shot" src="images/guide/fb_step1_content.png" alt="의견 내용 입력">
@@ -142,7 +142,7 @@
               <img class="guide-step-shot" src="images/guide/fb_step2_submit.png" alt="등록 버튼">
               <div class="guide-step-text"><span class="guide-num">2</span><b>등록</b><br>버튼을 누르면 의견이 등록되고, 관리자가 답변을 남기면 같은 스레드에 이어서 표시됩니다.</div>
             </div>
-            <div class="guide-tip">💡 급한 문의는 사이드바 "문의하기"(카카오톡 채널)를 이용해주세요.</div>
+            <div class="guide-tip">💡 급한 문의는 사이드바 "오픈채팅"(카카오톡 채널)을 이용해주세요.</div>
           </div>
 
         </div>
