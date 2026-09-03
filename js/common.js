@@ -39,10 +39,9 @@ function _applyPage(id) {
     var subnav = document.getElementById('sidebar-subnav-settings');
     if (subnav) subnav.style.display = 'none';
   }
-  // 이미지 만들기 서브메뉴는 이미지 계열이 아닐 때 닫기
+  // 이미지 스튜디오 서브메뉴는 하위 항목이 하나뿐이라 접지 않고 항상 펼쳐둠(2026-09-04) —
+  // 다른 페이지로 이동해도 active 표시만 지운다.
   if (id !== 'list' && id !== 2 && id !== 'free') {
-    var imgSubnav = document.getElementById('sidebar-subnav-image');
-    if (imgSubnav) imgSubnav.style.display = 'none';
     document.querySelectorAll('#sidebar-subnav-image .sidebar-subitem').forEach(function(i) { i.classList.remove('active'); });
   }
   if (id === 'list' || id === 2) {
