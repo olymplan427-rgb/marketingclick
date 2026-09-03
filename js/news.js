@@ -35,14 +35,37 @@ var NEWS_TOPIC_SYSTEM_TECHNICAL = [
   '{"topics":[{"title":"블로그 주제 문구","blogType":"교육칼럼","keywords":"키워드1, 키워드2","reason":"이 소재를 추천하는 이유 한 줄","sourceIds":[0,3]}]}'
 ].join('\n');
 
-var REGION_TOPIC_SYSTEM = [
+// 지역 트렌드 기반은 100개를 한 번에 단일 호출로 보내면 Vercel 릴레이의 모델당 8초 타임아웃
+// (relay.js GEMINI_PER_ATTEMPT_TIMEOUT_MS)을 넘기기 쉬워 실패가 잦았음(2026-09-05 실측: 노원구 등
+// 검색량 많은 지역). report.js가 이미 같은 문제(100개 단일호출 → 524 타임아웃)를 맵-리듀스로
+// 해결해뒀으므로 동일 패턴 적용:
+// ① MAP — REPORT_CHUNK_SIZE(report.js 공용 상수)개씩 나눠 묶음별로 소재 후보만 가볍게 추출
+// ② REDUCE — 묶음별 후보(원본 블로그 글이 아니라 이미 요약된 소량 데이터)를 모아 중복 병합 + 최종 5~8개 선정
+// 100개 전체 유지, 응답 품질 그대로 — 호출 하나당 처리량만 줄여 타임아웃 위험을 낮추는 방식.
+// (호출 수가 늘어나므로 Gemini 키가 여러 개면 config 시트 GEMINI_API_KEY에 쉼표로 이어 붙이면
+// relay.js가 순환 사용함 — 쿼터가 부족해지면 키를 추가할 것)
+var REGION_TOPIC_SYSTEM_MAP = [
   '너는 {{과목}} 학원({{학원명}}) 마케팅 담당자를 돕는 소재 기획자야.',
-  '특정 지역 수학학원 관련 네이버 블로그 검색 결과 목록(JSON, 각 항목에 index가 붙어 있음)을 받는다.',
+  '특정 지역 수학학원 관련 네이버 블로그 검색 결과 중 한 묶음(전체의 일부, JSON 목록)을 받는다. 각 항목엔 index가 붙어 있다.',
   '목록 중 학원과 무관한 글(개인 잡담·후기성 글, 수학학원이 아닌 다른 과목 학원, 명백한 스팸)은 제외하고,',
-  '실제 그 지역 수학학원들이 최근 다룬 소재를 참고해 우리 학원 블로그로 쓸 만한 주제를 만들어라.',
-  '경쟁학원 사례를 그대로 베끼지 말고 우리 학원 관점으로 재구성하고, 아직 안 다뤄진 소재를 우선하라.',
+  '이 묶음에서 다뤄진 소재를 참고해 우리 학원 블로그로 쓸 만한 주제 후보를 뽑아라.',
+  '경쟁학원 사례를 그대로 베끼지 말고 우리 학원 관점으로 재구성하라.',
+  '이 묶음은 전체 데이터의 일부일 뿐이니 2~4개 정도만 뽑아라 — 나중에 다른 묶음 결과와 합쳐서 최종 선별한다.',
   '',
-  '5~8개 주제를 추천해라. 각 항목: title/blogType/keywords/reason/sourceIndexes(참고한 글의 index 배열, 0~3개)',
+  '각 항목: title/blogType/keywords/reason/sourceIndexes(그 항목에 붙은 index 값 그대로 사용, 0~3개)',
+  'blogType은 다음 중 하나: 교육칼럼, 입시정보, 학원홍보, 합격인터뷰, 수학정보, 이벤트안내, 학원공지',
+  '',
+  '반드시 아래 JSON 형식으로만 응답 (다른 텍스트 금지):',
+  '{"topics":[{"title":"","blogType":"교육칼럼","keywords":"","reason":"","sourceIndexes":[0]}]}'
+].join('\n');
+
+var REGION_TOPIC_SYSTEM_REDUCE = [
+  '너는 {{과목}} 학원({{학원명}}) 마케팅 담당자를 돕는 소재 기획자야.',
+  '여러 묶음에서 1차로 뽑은 블로그 주제 후보 목록(JSON)을 받는다. 같은/비슷한 주제가 여러 묶음에서 중복으로 나올 수 있다.',
+  '중복·유사 주제는 하나로 합치고, 남은 후보 중 학원 블로그로 쓰기 좋은 5~8개를 최종 선정해라.',
+  '아직 안 다뤄진 소재, 우리 학원 관점으로 재구성하기 좋은 소재를 우선하라.',
+  '',
+  '각 항목: title/blogType/keywords/reason/sourceIndexes(합쳐지는 후보들의 index 값을 모아서, 최대 5개)',
   'blogType은 다음 중 하나: 교육칼럼, 입시정보, 학원홍보, 합격인터뷰, 수학정보, 이벤트안내, 학원공지',
   '',
   '반드시 아래 JSON 형식으로만 응답 (다른 텍스트 금지):',
@@ -56,9 +79,16 @@ function buildNewsTopicSystem() {
     .replace(/\{\{과목\}\}/g, profile.subject || '수학');
 }
 
-function buildRegionTopicSystem() {
+function buildRegionTopicMapSystem() {
   var profile = loadAcademyProfile();
-  return REGION_TOPIC_SYSTEM
+  return REGION_TOPIC_SYSTEM_MAP
+    .replace(/\{\{학원명\}\}/g, profile.name || '학원')
+    .replace(/\{\{과목\}\}/g, profile.subject || '수학');
+}
+
+function buildRegionTopicReduceSystem() {
+  var profile = loadAcademyProfile();
+  return REGION_TOPIC_SYSTEM_REDUCE
     .replace(/\{\{학원명\}\}/g, profile.name || '학원')
     .replace(/\{\{과목\}\}/g, profile.subject || '수학');
 }
@@ -112,23 +142,52 @@ async function fetchNewsTopics() {
   });
 }
 
-// 지역 트렌드 기반 소재 조회+AI 정리 — 실패 시 throw, 성공 시 refs까지 채운 topics 배열 반환.
-async function fetchRegionTopics(region) {
+// 지역 트렌드 기반 소재 조회+AI 정리(맵-리듀스) — 실패 시 throw, 성공 시 refs까지 채운 topics 배열 반환.
+// onProgress(선택): 진행 상황 문구를 버튼 등에 반영하고 싶을 때 콜백으로 전달.
+async function fetchRegionTopics(region, onProgress) {
   var items = await reportFetchRegionBlogs(region);
   if (!items.length) throw new Error('"' + region + ' 수학학원" 관련 블로그를 찾지 못했습니다.');
 
   var itemsForAI = items.slice(0, 100).map(function(it, i) {
     return { index: i, title: it.title, description: it.description, bloggername: it.bloggername, postdate: it.postdate };
   });
+  var chunkSize = (typeof REPORT_CHUNK_SIZE === 'number') ? REPORT_CHUNK_SIZE : 20;
+  var chunks = [];
+  for (var ci = 0; ci < itemsForAI.length; ci += chunkSize) chunks.push(itemsForAI.slice(ci, ci + chunkSize));
 
-  var systemPrompt = buildRegionTopicSystem();
-  var userContent = JSON.stringify(itemsForAI);
-  var raw = await geminiProxyCall({ model: getModel('gemini'), system: systemPrompt, content: userContent, max_tokens: 3500 });
+  // ① MAP — 묶음별로 소재 후보만 가볍게 추출 (각 호출이 작아 8초 타임아웃에 잘 안 걸림)
+  var mapSystem = buildRegionTopicMapSystem();
+  var candidates = [];
+  var failedChunks = 0;
+  for (var i = 0; i < chunks.length; i++) {
+    if (onProgress) onProgress('지역 트렌드 소재 분석 중... (' + (i + 1) + '/' + chunks.length + ')');
+    var parsedChunk = null;
+    for (var attempt = 0; attempt < 2 && !parsedChunk; attempt++) {
+      try {
+        var rawChunk = await geminiProxyCall({ model: getModel('gemini'), system: mapSystem, content: JSON.stringify(chunks[i]), max_tokens: 2000 });
+        parsedChunk = blogParseJson(rawChunk);
+      } catch (chunkErr) {
+        console.warn('지역 트렌드 소재 묶음 ' + (i + 1) + ' 분석 실패(시도 ' + (attempt + 1) + '):', chunkErr.message);
+      }
+    }
+    if (parsedChunk && parsedChunk.topics) candidates = candidates.concat(parsedChunk.topics);
+    else failedChunks++;
+  }
+  if (!candidates.length) throw new Error('묶음별 1차 분석에 전부 실패했습니다 — 콘솔(F12)에서 원본 응답 확인.');
+  if (failedChunks && typeof showToast === 'function') {
+    showToast('지역 트렌드: ' + failedChunks + '개 묶음은 응답 지연으로 제외하고 나머지로 정리합니다');
+  }
+
+  // ② REDUCE — 후보(이미 요약된 소량 데이터)를 모아 중복 병합 + 최종 5~8개 선정
+  if (onProgress) onProgress('지역 트렌드 소재 최종 정리 중...');
+  var reduceSystem = buildRegionTopicReduceSystem();
+  var userContent = JSON.stringify(candidates);
+  var raw = await geminiProxyCall({ model: getModel('gemini'), system: reduceSystem, content: userContent, max_tokens: 3500 });
   var parsed;
   try {
     parsed = blogParseJson(raw);
   } catch (parseErr) {
-    raw = await geminiProxyCall({ model: getModel('gemini'), system: systemPrompt, content: userContent, max_tokens: 8192 });
+    raw = await geminiProxyCall({ model: getModel('gemini'), system: reduceSystem, content: userContent, max_tokens: 8192 });
     try {
       parsed = blogParseJson(raw);
     } catch (parseErr2) {
@@ -215,7 +274,7 @@ async function topicSuggestGenerate(btn) {
     .then(function(topics) { return { topics: topics }; })
     .catch(function(e) { return { error: e.message }; });
   var regionPromise = region
-    ? fetchRegionTopics(region).then(function(topics) { return { topics: topics }; }).catch(function(e) { return { error: e.message }; })
+    ? fetchRegionTopics(region, function(msg) { btn.textContent = '⏳ ' + msg; }).then(function(topics) { return { topics: topics }; }).catch(function(e) { return { error: e.message }; })
     : Promise.resolve({ skipped: true });
 
   var results = await Promise.all([newsPromise, regionPromise]);
