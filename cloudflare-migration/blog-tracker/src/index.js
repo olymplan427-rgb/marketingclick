@@ -158,7 +158,10 @@ async function getMyPosts(env, userId, n) {
 async function getCreditCost(env, actionKey) {
   const row = await env.DB.prepare('SELECT cost FROM config_credit_costs WHERE action_key = ?').bind(actionKey).first();
   if (row && row.cost !== null && row.cost !== undefined) return row.cost;
-  return CREDIT_COST_DEFAULTS[actionKey] || 1;
+  // "|| 1"로 두면 image_generate:0처럼 정당한 기본값 0이 falsy라 1로 잘못 대체되는 버그가 있었음
+  // (2026-09-04 발견 — 성적우수 이미지 생성이 사이드바에 "무료"로 안 붙는 원인이었음).
+  const def = CREDIT_COST_DEFAULTS[actionKey];
+  return def === undefined ? 1 : def;
 }
 
 // credit_log 테이블(append-only 로그) — blog_posts/feedback과 동일 패턴(school_share의 upsert와는 다름).
