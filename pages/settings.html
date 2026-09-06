@@ -3,6 +3,51 @@
   <div class="page" id="page-settings">
     <div class="set-content">
 
+      <!-- 계정 -->
+      <div class="set-tab" id="settab-account" style="display:none;">
+        <div class="set-page-title">계정</div>
+        <div class="set-page-sub">내 계정 정보를 확인하고 비밀번호를 변경합니다</div>
+
+        <div class="set-prompt-body">
+          <div class="set-card">
+            <div class="set-card-title">내 정보</div>
+            <div class="set-current-list">
+              <div class="set-current-row">
+                <span class="set-current-label">아이디</span>
+                <span class="set-current-val" id="account-info-id">—</span>
+              </div>
+              <div class="set-current-row">
+                <span class="set-current-label">이름</span>
+                <span class="set-current-val" id="account-info-name">—</span>
+              </div>
+              <div class="set-current-row">
+                <span class="set-current-label">학원명</span>
+                <span class="set-current-val" id="account-info-academy">—</span>
+              </div>
+              <div class="set-current-row">
+                <span class="set-current-label">역할</span>
+                <span class="set-current-val" id="account-info-role">—</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="set-card">
+            <div class="set-card-title">비밀번호 변경</div>
+            <div class="set-card-desc">새 비밀번호를 입력해주세요.</div>
+            <div class="set-field">
+              <label class="set-label">새 비밀번호</label>
+              <input id="account-new-pw" type="password" placeholder="4자 이상" class="set-input" autocomplete="new-password" />
+            </div>
+            <div class="set-field">
+              <label class="set-label">새 비밀번호 확인</label>
+              <input id="account-new-pw-confirm" type="password" placeholder="다시 입력" class="set-input" autocomplete="new-password" />
+            </div>
+            <button class="btn btn-primary set-save-btn" onclick="accountChangePassword()">비밀번호 변경</button>
+            <div id="account-pw-alert" class="blog-alert err" style="margin-top:10px;"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- 인스타그램 연동 -->
       <div class="set-tab" id="settab-instagram" style="display:none;">
         <div class="set-page-title">인스타그램 연동</div>

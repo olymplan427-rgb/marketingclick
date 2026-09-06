@@ -21,7 +21,7 @@ function switchPage(num) {
 
 
 // 유효한 showPage() id 목록 — URL(?page=) 복원 시 화이트리스트로 사용(잘못된 값은 홈으로).
-var VALID_PAGE_IDS = ['home', 'list', 'free', 'blog', 'blog-history', 'blog-news', 'settings-prompt', 'settings-instagram', 'monitor', 'mapsearch', 'report', 'schoolshare', 'credit', 'feedback', 'guide', 'admin'];
+var VALID_PAGE_IDS = ['home', 'list', 'free', 'blog', 'blog-history', 'blog-news', 'settings-account', 'settings-prompt', 'settings-instagram', 'monitor', 'mapsearch', 'report', 'schoolshare', 'credit', 'feedback', 'guide', 'admin'];
 
 // 메뉴 이동 시 호출하는 진입점 — 화면 전환(_applyPage) + URL(?page=) 동기화를 함께 처리.
 // 블로그 작성/이미지 만들기 내부의 세부 스텝(Step1~3 등)은 URL에 반영하지 않음(의도적 — showPage를 안 거침).
@@ -35,7 +35,7 @@ function _applyPage(id) {
   document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
   document.querySelectorAll('.sidebar-item').forEach(function(i) { i.classList.remove('active'); });
   // 설정 서브메뉴는 설정 계열이 아닐 때 닫기
-  if (id !== 'settings-prompt' && id !== 'settings-instagram') {
+  if (id !== 'settings-account' && id !== 'settings-prompt' && id !== 'settings-instagram') {
     var subnav = document.getElementById('sidebar-subnav-settings');
     if (subnav) subnav.style.display = 'none';
   }
@@ -83,20 +83,21 @@ function _applyPage(id) {
     } else if (id === 'blog-news') {
       if (typeof topicSuggestInit === 'function') topicSuggestInit();
     }
-  } else if (id === 'settings-prompt' || id === 'settings-instagram') {
+  } else if (id === 'settings-account' || id === 'settings-prompt' || id === 'settings-instagram') {
     document.getElementById('page-settings').classList.add('active');
     var navSettings = document.getElementById('nav-settings');
     if (navSettings) navSettings.classList.add('active');
     var subnav = document.getElementById('sidebar-subnav-settings');
     if (subnav) subnav.style.display = '';
-    var sub = id === 'settings-prompt' ? 'prompt' : 'instagram';
-    ['prompt','instagram'].forEach(function(t) {
+    var sub = id === 'settings-account' ? 'account' : (id === 'settings-prompt' ? 'prompt' : 'instagram');
+    ['account','prompt','instagram'].forEach(function(t) {
       var ni = document.getElementById('nav-settings-' + t);
       if (ni) ni.classList.toggle('active', t === sub);
       var ti = document.getElementById('settab-' + t);
       if (ti) ti.style.display = (t === sub) ? '' : 'none';
     });
-    if (sub === 'prompt') settingsInitPrompt();
+    if (sub === 'account') settingsInitAccount();
+    else if (sub === 'prompt') settingsInitPrompt();
     else settingsInitInstagram();
   } else if (id === 'monitor') {
     document.getElementById('page-monitor').classList.add('active');
@@ -935,6 +936,69 @@ function _migrateOldPrompts() {
   var oldBlog = localStorage.getItem('mtt_blog_prompt') || '';
   if (oldBlog.indexOf('{{TYPE_RULES}}') !== -1 || oldBlog.indexOf('JSON 형식으로만 응답') !== -1) {
     localStorage.removeItem('mtt_blog_prompt');
+  }
+}
+
+// ── 계정 탭: 내 정보 표시 + 비밀번호 변경 ──────────────────────────
+function settingsInitAccount() {
+  var auth = getUserAuth();
+  var setText = function(id, val) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = val || '—';
+  };
+  setText('account-info-id', auth && auth.id);
+  setText('account-info-name', auth && auth.name);
+  setText('account-info-academy', auth && auth.academy);
+  setText('account-info-role', (auth && auth.role) || '일반');
+
+  var newPwEl = document.getElementById('account-new-pw');
+  var confirmEl = document.getElementById('account-new-pw-confirm');
+  var alertEl = document.getElementById('account-pw-alert');
+  if (newPwEl) newPwEl.value = '';
+  if (confirmEl) confirmEl.value = '';
+  if (alertEl) alertEl.className = 'blog-alert err';
+}
+
+async function gasChangePassword(newPw) {
+  var auth = getUserAuth();
+  if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
+  var cfg = getGasConfig();
+  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  var json = await _fetchGasJson(cfg.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'changePassword', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), newPw: newPw })
+  });
+  if (!json.ok) throw new Error(json.error || '비밀번호 변경에 실패했습니다.');
+}
+
+async function accountChangePassword() {
+  var newPwEl = document.getElementById('account-new-pw');
+  var confirmEl = document.getElementById('account-new-pw-confirm');
+  var alertEl = document.getElementById('account-pw-alert');
+  var newPw = newPwEl ? newPwEl.value : '';
+  var confirmPw = confirmEl ? confirmEl.value : '';
+
+  var showAlert = function(msg, ok) {
+    if (!alertEl) return;
+    alertEl.textContent = msg;
+    alertEl.className = 'blog-alert ' + (ok ? '' : 'err') + ' show';
+    if (ok) alertEl.style.color = '#16a34a';
+    else alertEl.style.color = '';
+  };
+
+  if (!newPw || newPw.length < 4) { showAlert('비밀번호는 4자 이상이어야 합니다.', false); return; }
+  if (newPw !== confirmPw) { showAlert('비밀번호 확인이 일치하지 않습니다.', false); return; }
+
+  try {
+    await gasChangePassword(newPw);
+    var auth = getUserAuth();
+    if (auth) localStorage.setItem(_authKey('user_pw'), newPw);
+    if (newPwEl) newPwEl.value = '';
+    if (confirmEl) confirmEl.value = '';
+    showAlert('비밀번호가 변경되었습니다.', true);
+  } catch (e) {
+    showAlert(e.message || '비밀번호 변경에 실패했습니다.', false);
   }
 }
 
