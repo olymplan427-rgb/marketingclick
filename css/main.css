@@ -1,9 +1,9 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --acc:#006078;
-  --acc2:#004a5e;
-  --acc-light:#e3f1f4;
-  --acc-border:#bcdde3;
+  --acc:#F2564B;
+  --acc2:#D8392D;
+  --acc-light:#FDECEA;
+  --acc-border:#F6C4BE;
   --bg:#f1efec;
   --sur:#fff;
   --bdr:#e5e3df;
