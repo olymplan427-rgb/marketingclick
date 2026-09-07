@@ -4,7 +4,7 @@
 import { sendMail } from './mail.js';
 const ADMIN_ACTIONS = ['adminListUsers', 'adminUpdateUser', 'adminApproveUser', 'adminGetConfig', 'adminSetConfigValue', 'adminSetModels', 'adminSetCreditCost', 'adminAddAnnouncement', 'adminUpdateAnnouncement', 'adminDeleteAnnouncement', 'adminListPosts', 'adminDeletePost', 'adminValidatePostAI', 'adminGetPostValidations', 'adminSetValidationDecision', 'adminListPromptVersions', 'adminGetPromptVersionDetail', 'adminActivatePromptVersion', 'adminGenerateAiPromptRevision'];
 // getActiveBlogPrompt: 관리자 전용이 아님 — 블로그를 쓰는 모든 로그인 사용자가 글 작성 시마다 호출.
-const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus', 'creditHistory', 'creditQuote', 'getAnnouncements', 'getActiveBlogPrompt', 'changePassword', ...ADMIN_ACTIONS];
+const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus', 'creditHistory', 'creditQuote', 'getAnnouncements', 'getActiveBlogPrompt', 'myProfile', 'changePassword', ...ADMIN_ACTIONS];
 
 // 액션키별 기본 크레딧 소모량 — config_credit_costs 테이블에 값이 있으면 그쪽이 우선(코드 재배포
 // 없이 D1 값만 바꿔 조정 가능, 기존 구글시트 config 표와 동일한 우선순위 패턴). 없을 때만 기본값 사용.
@@ -75,7 +75,8 @@ async function findUser(env, id) {
   if (!row) return null;
   return {
     id: row.id, password: row.password, name: row.name, academy: row.academy, status: row.status, role: row.role,
-    monthlyCredit: row.monthly_credit, remainingCredit: row.remaining_credit, creditResetMonth: row.credit_reset_month
+    monthlyCredit: row.monthly_credit, remainingCredit: row.remaining_credit, creditResetMonth: row.credit_reset_month,
+    phone: row.phone, email: row.email
   };
 }
 
@@ -125,13 +126,17 @@ async function verifyUser(env, id, password, site) {
   if (String(u.status) !== '사용') return { valid: false, error: '비활성화된 계정입니다. 관리자에게 문의하세요.' };
   if (String(u.password) !== String(password)) return { valid: false, error: '비밀번호가 일치하지 않습니다.' };
   if (site === 'dev' && String(u.role) !== '관리자') return { valid: false, error: '이 주소는 개발용입니다.' };
-  return { valid: true, name: u.name, academy: u.academy, role: u.role };
+  return { valid: true, name: u.name, academy: u.academy, role: u.role, phone: u.phone, email: u.email };
 }
 
-// 비밀번호 변경 — changePassword는 AUTHED_ACTIONS라 verifyUser(현재 비밀번호)가 이미 통과된
-// 뒤에만 호출되므로, 여기선 새 비밀번호로 그냥 덮어쓰면 된다(별도 "현재 비밀번호" 재확인 불필요).
-async function changePassword(env, userId, newPw) {
-  if (!newPw || String(newPw).length < 4) return { ok: false, error: '비밀번호는 4자 이상이어야 합니다.' };
+// 비밀번호 변경 — verifyUser가 세션에 저장된(로컬 localStorage) 현재 비밀번호로 이미 인증을
+// 통과했더라도, 사용자가 화면에서 직접 입력한 "현재 비밀번호"를 다시 한번 대조해 실수로 다른
+// 사람 세션이 남아있는 채로 바꾸는 걸 방지한다(2026-09-07, 명시적 재확인 요청 반영).
+async function changePassword(env, userId, oldPw, newPw) {
+  if (!newPw || String(newPw).length < 4) return { ok: false, error: '새 비밀번호는 4자 이상이어야 합니다.' };
+  const u = await findUser(env, userId);
+  if (!u) return { ok: false, error: '사용자를 찾을 수 없습니다.' };
+  if (String(u.password) !== String(oldPw)) return { ok: false, error: '현재 비밀번호가 일치하지 않습니다.' };
   await env.DB.prepare('UPDATE users SET password=? WHERE id=?').bind(String(newPw), userId).run();
   return { ok: true };
 }
@@ -1176,7 +1181,8 @@ export default {
         if (data.action === 'creditStatus') return jsonResponse(await getCreditStatus(env, data.userId));
         if (data.action === 'creditHistory') return jsonResponse(await getCreditHistory(env, data.userId, data.n || 50));
         if (data.action === 'creditQuote') return jsonResponse(await getCreditQuote(env, data.userId, data.actionKey || ''));
-        if (data.action === 'changePassword') return jsonResponse(await changePassword(env, data.userId, data.newPw || ''));
+        if (data.action === 'myProfile') return jsonResponse({ ok: true, name: v.name, academy: v.academy, phone: v.phone || '', email: v.email || '' });
+        if (data.action === 'changePassword') return jsonResponse(await changePassword(env, data.userId, data.oldPw || '', data.newPw || ''));
       }
 
       if (data.token !== env.SHARED_TOKEN) return jsonResponse({ error: 'Unauthorized' });

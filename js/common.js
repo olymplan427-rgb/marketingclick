@@ -949,17 +949,27 @@ function settingsInitAccount() {
   setText('account-info-id', auth && auth.id);
   setText('account-info-name', auth && auth.name);
   setText('account-info-academy', auth && auth.academy);
-  setText('account-info-role', (auth && auth.role) || '일반');
 
+  var oldPwEl = document.getElementById('account-old-pw');
   var newPwEl = document.getElementById('account-new-pw');
   var confirmEl = document.getElementById('account-new-pw-confirm');
   var alertEl = document.getElementById('account-pw-alert');
+  if (oldPwEl) oldPwEl.value = '';
   if (newPwEl) newPwEl.value = '';
   if (confirmEl) confirmEl.value = '';
   if (alertEl) alertEl.className = 'blog-alert err';
+
+  // 연락처/이메일은 localStorage 세션에 없어(로그인 응답에 포함 안 됨) 서버에서 조회해야 함.
+  gasMyProfile().then(function(p) {
+    setText('account-info-phone', p.phone);
+    setText('account-info-email', p.email);
+  }).catch(function() {
+    setText('account-info-phone', null);
+    setText('account-info-email', null);
+  });
 }
 
-async function gasChangePassword(newPw) {
+async function gasMyProfile() {
   var auth = getUserAuth();
   if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
   var cfg = getGasConfig();
@@ -967,15 +977,31 @@ async function gasChangePassword(newPw) {
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'changePassword', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), newPw: newPw })
+    body: JSON.stringify({ action: 'myProfile', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId() })
+  });
+  if (!json.ok) throw new Error(json.error || '내 정보 조회에 실패했습니다.');
+  return json;
+}
+
+async function gasChangePassword(oldPw, newPw) {
+  var auth = getUserAuth();
+  if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
+  var cfg = getGasConfig();
+  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  var json = await _fetchGasJson(cfg.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'changePassword', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), oldPw: oldPw, newPw: newPw })
   });
   if (!json.ok) throw new Error(json.error || '비밀번호 변경에 실패했습니다.');
 }
 
 async function accountChangePassword() {
+  var oldPwEl = document.getElementById('account-old-pw');
   var newPwEl = document.getElementById('account-new-pw');
   var confirmEl = document.getElementById('account-new-pw-confirm');
   var alertEl = document.getElementById('account-pw-alert');
+  var oldPw = oldPwEl ? oldPwEl.value : '';
   var newPw = newPwEl ? newPwEl.value : '';
   var confirmPw = confirmEl ? confirmEl.value : '';
 
@@ -987,13 +1013,15 @@ async function accountChangePassword() {
     else alertEl.style.color = '';
   };
 
-  if (!newPw || newPw.length < 4) { showAlert('비밀번호는 4자 이상이어야 합니다.', false); return; }
-  if (newPw !== confirmPw) { showAlert('비밀번호 확인이 일치하지 않습니다.', false); return; }
+  if (!oldPw) { showAlert('현재 비밀번호를 입력해주세요.', false); return; }
+  if (!newPw || newPw.length < 4) { showAlert('새 비밀번호는 4자 이상이어야 합니다.', false); return; }
+  if (newPw !== confirmPw) { showAlert('새 비밀번호 확인이 일치하지 않습니다.', false); return; }
 
   try {
-    await gasChangePassword(newPw);
+    await gasChangePassword(oldPw, newPw);
     var auth = getUserAuth();
     if (auth) localStorage.setItem(_authKey('user_pw'), newPw);
+    if (oldPwEl) oldPwEl.value = '';
     if (newPwEl) newPwEl.value = '';
     if (confirmEl) confirmEl.value = '';
     showAlert('비밀번호가 변경되었습니다.', true);
