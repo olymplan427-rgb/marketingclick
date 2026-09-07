@@ -439,6 +439,8 @@ canvas{display:block;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.15);cu
 .guide-section-title{font-size:17px;font-weight:900;color:var(--heading);margin-bottom:6px;}
 .guide-section-desc{font-size:13px;color:var(--mut);line-height:1.6;margin-bottom:14px;}
 .guide-shot{max-width:440px;width:100%;border:1px solid var(--bdr);border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:14px;display:block;}
+.guide-video-wrap{position:relative;width:100%;max-width:640px;aspect-ratio:16/9;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:16px;background:#000;}
+.guide-video-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
 .guide-steps{display:flex;flex-direction:column;gap:8px;}
 .guide-step{font-size:13px;color:var(--txt);line-height:1.6;padding:10px 14px;background:var(--sur);border:1px solid var(--bdr);border-radius:8px;}
 .guide-tip{margin-top:12px;font-size:12.5px;color:var(--acc);background:var(--acc-light);border-radius:8px;padding:10px 14px;line-height:1.6;}
