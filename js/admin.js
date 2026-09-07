@@ -282,7 +282,7 @@ function adminRenderPromptVersions() {
 }
 
 async function adminRunGenerateAiPromptRevision(btn) {
-  if (btn) { btn.disabled = true; btn.textContent = 'AI 분석 중... (재시도 포함 최대 3분 소요될 수 있음)'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'AI 분석 중... (3단계로 나눠 진행 — 재시도 포함 최대 5분 소요될 수 있음)'; }
   try {
     var res = await adminGenerateAiPromptRevision();
     adminState.promptVersions = await adminListPromptVersions();

@@ -968,28 +968,7 @@ async function adminGenerateAiPromptRevision(env) {
   const cfg = await getActiveProviderConfig(env);
   if (!cfg.ok) return cfg;
 
-  const systemPrompt = '당신은 블로그 생성 프롬프트를 개선하는 프롬프트 엔지니어다. 아래는 현재 활성 프롬프트(draft_technical, final_system, type_rules)와, 이 프롬프트로 실제 작성된 글들에서 반복적으로 발견된 문제 목록이다.\n\n'
-    + '목표: 문제를 줄이는 방향으로 draft_technical, final_system, type_rules를 개선하되, 다음을 반드시 지켜라.\n'
-    + '1. draft_technical 안의 자리표시자 {{TYPE_RULES}}, {{USER_STYLE}}, {{LENGTH_GUIDE}}는 정확히 그 문자열 그대로 남겨야 한다(대소문자·중괄호 포함, 절대 다른 문구로 바꾸지 마라). 코드가 이 문자열을 찾아 치환하므로, 하나라도 빠지거나 바뀌면 그 자리가 빈 채로 나가 프롬프트가 깨진다.\n'
-    + '2. final_system 안의 {{학원명}}, {{키워드}}, {{과목}}, {{대상}}, {{웹사이트}}, {{목표분량}}, {{연락처}}, {{지도링크}}도 마찬가지로 정확히 보존해야 한다.\n'
-    + '3. type_rules는 원래 있던 키(글 유형 이름)를 그대로 유지하고, 값(설명 문자열)만 개선한다. 키를 추가하거나 빼지 마라.\n'
-    + '4. 문제가 반복되지 않는 항목은 억지로 바꾸지 마라 — 실제 반복된 문제만 겨냥해서 최소한으로 수정한다.\n'
-    + '5. change_summary에 "무엇을, 왜 바꿨는지"를 2~4문장으로 명확히 적어라(관리자가 이 요약만 보고 활성화 여부를 결정한다).\n\n'
-    + '반드시 아래 JSON 형식으로만 응답하라:\n'
-    + '{"change_summary":"...","draft_technical":"...","final_system":"...","type_rules":{"교육칼럼":"...","입시정보":"...","학원홍보":"...","합격인터뷰":"...","수학정보":"...","이벤트안내":"...","학원공지":"..."}}';
-
-  const userContent = [
-    '## 현재 활성 프롬프트 버전: ' + active.version_label,
-    '',
-    '### draft_technical',
-    active.draft_technical,
-    '',
-    '### final_system',
-    active.final_system,
-    '',
-    '### type_rules',
-    active.type_rules_json,
-    '',
+  const issuesBlock = [
     '## 이 버전으로 작성된 글 ' + tier1.total + '건 중 규칙 검사 결과',
     'PASS ' + tier1.statusCounts.PASS + ' / REVISE ' + tier1.statusCounts.REVISE + ' / HOLD ' + tier1.statusCounts.HOLD,
     '카테고리별 발생 건수: ' + JSON.stringify(tier1.categoryCounts),
@@ -1000,53 +979,95 @@ async function adminGenerateAiPromptRevision(env) {
     tier2Examples.join('\n') || '(검증 이력 없음)'
   ].join('\n');
 
-  async function attempt(maxTokens) {
-    const r = await runWithGenLock(env, () => callAiRelay(env, {
-      provider: cfg.provider, apiKey: cfg.apiKey, models: cfg.models,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userContent }],
-      max_tokens: maxTokens
-    }));
-    if (!r.ok) return { text: '', raw: r };
-    const t = (r.data && r.data.content && r.data.content[0] && r.data.content[0].text) || r.text || '';
-    return { text: t, raw: r };
+  // Vercel 릴레이의 60초 실행시간 제한(HTTP 504) 안에 확실히 끝내려고, 한 번의 거대한 호출로
+  // draft_technical+final_system+type_rules를 전부 다시 쓰게 하는 대신 조각별로 나눠서 3번
+  // 호출한다(2026-09-07 실측: 한 번에 다 시키면 출력이 너무 길어 60초를 자주 넘김). 조각마다
+  // 출력이 훨씬 짧아져 시간 안에 끝날 확률이 크게 올라간다.
+  async function reviseOnePiece(pieceLabel, pieceSystemGuide, currentPieceText, requiredPlaceholders) {
+    const systemPrompt = '당신은 블로그 생성 프롬프트를 개선하는 프롬프트 엔지니어다. 아래는 현재 활성 프롬프트의 "' + pieceLabel + '" 조각과, 이 프롬프트로 실제 작성된 글들에서 반복적으로 발견된 문제 목록이다.\n\n'
+      + pieceSystemGuide + '\n\n'
+      + '문제가 반복되지 않는 부분은 억지로 바꾸지 마라 — 실제 반복된 문제만 겨냥해서 최소한으로 수정한다. change_summary에 "무엇을, 왜 바꿨는지"를 1~3문장으로 적어라.\n\n'
+      + '반드시 아래 JSON 형식으로만 응답하라(다른 텍스트 금지):\n'
+      + '{"change_summary":"...","revised_text":"..."}';
+    const userContent = '## 현재 ' + pieceLabel + '\n' + currentPieceText + '\n\n' + issuesBlock;
+
+    async function attempt(maxTokens) {
+      const r = await runWithGenLock(env, () => callAiRelay(env, {
+        provider: cfg.provider, apiKey: cfg.apiKey, models: cfg.models,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userContent }],
+        max_tokens: maxTokens
+      }));
+      if (!r.ok) return { text: '', raw: r };
+      const t = (r.data && r.data.content && r.data.content[0] && r.data.content[0].text) || r.text || '';
+      return { text: t, raw: r };
+    }
+
+    let tokens = 4000;
+    let text = '', raw = { ok: false };
+    for (let i = 0; i < 3; i++) {
+      ({ text, raw } = await attempt(tokens));
+      if (text) break;
+      if (!raw.ok) { if (i < 2) await sleep(3000 * (i + 1)); }
+      else tokens = Math.min(tokens * 2, 12000);
+    }
+    if (!raw.ok) return { ok: false, error: raw.error || (pieceLabel + ' 조각 생성 실패(릴레이 오류)') };
+    if (!text) return { ok: false, error: pieceLabel + ' 조각에서 AI로부터 빈 응답을 받았습니다(재시도 후에도 실패).' };
+
+    let parsed;
+    try { parsed = extractJson(text); } catch (e) {
+      return { ok: false, error: pieceLabel + ' 응답 JSON 파싱 실패 — 원문 앞부분: ' + text.slice(0, 300) };
+    }
+    const missing = requiredPlaceholders.filter((p) => !String(parsed.revised_text || '').includes(p));
+    if (missing.length) {
+      return { ok: false, error: pieceLabel + '에서 필수 자리표시자가 빠져 있어 저장을 거부했습니다: ' + missing.join(', ') };
+    }
+    return { ok: true, revisedText: parsed.revised_text, changeSummary: parsed.change_summary || '' };
   }
 
-  let tokens = 8000;
-  let text = '', raw = { ok: false };
-  for (let i = 0; i < 3; i++) {
-    ({ text, raw } = await attempt(tokens));
-    if (text) break;
-    if (!raw.ok) { if (i < 2) await sleep(3000 * (i + 1)); }
-    else tokens = Math.min(tokens * 2, 16000);
-  }
-  if (!raw.ok) return raw;
-  if (!text) return { ok: false, error: 'AI로부터 빈 응답을 받았습니다(재시도 후에도 실패).' };
+  const draftResult = await reviseOnePiece(
+    'draft_technical',
+    '자리표시자 {{TYPE_RULES}}, {{USER_STYLE}}, {{LENGTH_GUIDE}}는 정확히 그 문자열 그대로 남겨야 한다(대소문자·중괄호 포함, 절대 다른 문구로 바꾸지 마라). 코드가 이 문자열을 찾아 치환하므로 하나라도 빠지거나 바뀌면 그 자리가 빈 채로 나가 프롬프트가 깨진다.',
+    active.draft_technical,
+    ['{{TYPE_RULES}}', '{{USER_STYLE}}', '{{LENGTH_GUIDE}}']
+  );
+  if (!draftResult.ok) return draftResult;
 
-  let parsed;
+  const finalResult = await reviseOnePiece(
+    'final_system',
+    '자리표시자 {{학원명}}, {{키워드}}, {{과목}}, {{대상}}, {{웹사이트}}, {{목표분량}}, {{연락처}}, {{지도링크}}는 정확히 그 문자열 그대로 남겨야 한다(하나라도 빠지거나 바뀌면 그 자리가 빈 채로 나가 프롬프트가 깨진다).',
+    active.final_system,
+    ['{{학원명}}', '{{목표분량}}']
+  );
+  if (!finalResult.ok) return finalResult;
+
+  let currentTypeRules = {};
+  try { currentTypeRules = JSON.parse(active.type_rules_json || '{}'); } catch (e) {}
+  const typeRulesResult = await reviseOnePiece(
+    'type_rules(JSON 객체, 글 유형별 규칙)',
+    '아래는 글 유형별 규칙을 담은 JSON 객체 문자열이다. revised_text에도 반드시 유효한 JSON 객체 문자열을 넣어라. 원래 있던 키(글 유형 이름)를 그대로 유지하고 값(설명 문자열)만 개선한다 — 키를 추가하거나 빼지 마라.',
+    JSON.stringify(currentTypeRules),
+    []
+  );
+  if (!typeRulesResult.ok) return typeRulesResult;
+
+  let newTypeRules;
   try {
-    parsed = extractJson(text);
+    newTypeRules = JSON.parse(typeRulesResult.revisedText);
   } catch (e) {
-    return { ok: false, error: 'AI 응답 JSON 파싱 실패 — 원문 앞부분: ' + text.slice(0, 300) };
+    return { ok: false, error: 'type_rules 조각이 유효한 JSON이 아니어서 저장을 거부했습니다 — 원문 앞부분: ' + String(typeRulesResult.revisedText).slice(0, 300) };
+  }
+  if (!newTypeRules || typeof newTypeRules !== 'object') {
+    return { ok: false, error: 'type_rules 조각이 JSON 객체가 아니어서 저장을 거부했습니다.' };
   }
 
-  // 자리표시자가 하나라도 빠지면 그 자리가 빈 채로 나가 실서비스가 깨지므로, draft로도
-  // 저장하지 않고 여기서 막는다 — 관리자가 활성화할 기회조차 주지 않는다.
-  const missingDraft = ['{{TYPE_RULES}}', '{{USER_STYLE}}', '{{LENGTH_GUIDE}}'].filter((p) => !String(parsed.draft_technical || '').includes(p));
-  const missingFinal = ['{{학원명}}', '{{목표분량}}'].filter((p) => !String(parsed.final_system || '').includes(p));
-  if (missingDraft.length || missingFinal.length) {
-    return { ok: false, error: 'AI가 제안한 프롬프트에 필수 자리표시자가 빠져 있어 저장을 거부했습니다: ' + missingDraft.concat(missingFinal).join(', ') };
-  }
-  if (!parsed.type_rules || typeof parsed.type_rules !== 'object') {
-    return { ok: false, error: 'AI 응답에 type_rules가 없어 저장을 거부했습니다.' };
-  }
-
+  const changeSummary = [draftResult.changeSummary, finalResult.changeSummary, typeRulesResult.changeSummary].filter(Boolean).join(' / ');
   const newLabel = active.version_label.replace(/^v(\d+)-.*/, (m, n) => 'v' + (parseInt(n, 10) + 1)) + '-ai-auto-' + nowKST().slice(0, 10);
   const insertRes = await env.DB.prepare(
     'INSERT INTO prompt_versions (version_label, created_at, source, status, based_on_id, change_summary, draft_technical, final_system, type_rules_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(newLabel, nowKST(), 'ai_auto', 'draft', active.id, parsed.change_summary || '', parsed.draft_technical, parsed.final_system, JSON.stringify(parsed.type_rules)).run();
+  ).bind(newLabel, nowKST(), 'ai_auto', 'draft', active.id, changeSummary, draftResult.revisedText, finalResult.revisedText, JSON.stringify(newTypeRules)).run();
 
-  return { ok: true, id: insertRes.meta.last_row_id, versionLabel: newLabel, changeSummary: parsed.change_summary || '' };
+  return { ok: true, id: insertRes.meta.last_row_id, versionLabel: newLabel, changeSummary: changeSummary };
 }
 
 async function adminDeletePost(env, id) {
