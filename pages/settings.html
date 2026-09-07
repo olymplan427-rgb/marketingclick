@@ -25,15 +25,23 @@
                 <span class="set-current-val" id="account-info-academy">—</span>
               </div>
               <div class="set-current-row">
-                <span class="set-current-label">역할</span>
-                <span class="set-current-val" id="account-info-role">—</span>
+                <span class="set-current-label">연락처</span>
+                <span class="set-current-val" id="account-info-phone">—</span>
+              </div>
+              <div class="set-current-row">
+                <span class="set-current-label">이메일</span>
+                <span class="set-current-val" id="account-info-email">—</span>
               </div>
             </div>
           </div>
 
           <div class="set-card">
             <div class="set-card-title">비밀번호 변경</div>
-            <div class="set-card-desc">새 비밀번호를 입력해주세요.</div>
+            <div class="set-card-desc">현재 비밀번호를 확인한 뒤 새 비밀번호로 변경합니다.</div>
+            <div class="set-field">
+              <label class="set-label">현재 비밀번호</label>
+              <input id="account-old-pw" type="password" placeholder="현재 비밀번호" class="set-input" autocomplete="current-password" />
+            </div>
             <div class="set-field">
               <label class="set-label">새 비밀번호</label>
               <input id="account-new-pw" type="password" placeholder="4자 이상" class="set-input" autocomplete="new-password" />
