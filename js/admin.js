@@ -207,19 +207,15 @@ function adminBuildChartDayRange(from, to, byDay) {
 
 // ── 예상 비용 환산 (참고용 추정치) ──────────────────────────────────
 // 실제 청구 금액이 아니라 "이 정도 토큰량이면 유료 API 기준 대략 얼마 정도인가"를 가늠하기 위한
-// 참고 수치다(2026-09-08 피드백: "금액으로 환산할수가 있나?"). Gemini는 현재 무료 티어 키를 순환
-// 사용 중이라 실제 청구는 0원이지만, 사용량 감(sense)을 잡을 수 있도록 유료 기준가로도 계산해 보여줌.
+// 참고 수치다(2026-09-08 피드백: "금액으로 환산할수가 있나?"). Claude만 실제 유료로 쓰고 있어서
+// 우선 Claude만 계산한다(2026-09-08 피드백: "환율기준은 필요없음. 클로드 비용만 일단 계산해주면
+// 될 듯" — Gemini는 무료 티어 키를 쓰고 있어 실제 청구가 없으므로 제외, 원화 환산도 뺌).
 // 가격은 1M(백만) 토큰당 USD, 모델명에 포함된 키워드로 매칭 — 정확한 청구서가 아니므로 근사치.
 var ADMIN_TOKEN_PRICING_USD_PER_M = [
   { match: /opus/i, input: 15, output: 75 },
   { match: /sonnet/i, input: 3, output: 15 },
-  { match: /haiku/i, input: 0.8, output: 4 },
-  { match: /flash/i, input: 0.075, output: 0.3 },
-  { match: /gemini.*pro|pro.*gemini/i, input: 1.25, output: 5 },
-  { match: /gpt-4o-mini/i, input: 0.15, output: 0.6 },
-  { match: /gpt-4o|gpt-4/i, input: 2.5, output: 10 }
+  { match: /haiku/i, input: 0.8, output: 4 }
 ];
-var ADMIN_USD_TO_KRW = 1450; // 대략적인 환율 — 참고용 추정치라 엄밀하지 않음
 
 function adminPriceForModel(model) {
   for (var i = 0; i < ADMIN_TOKEN_PRICING_USD_PER_M.length; i++) {
@@ -232,6 +228,7 @@ function adminEstimateCostUsd(byProvider) {
   var total = 0;
   var matched = false;
   (byProvider || []).forEach(function(s) {
+    if (s.provider !== 'claude') return;
     var price = adminPriceForModel(s.model);
     if (!price) return;
     matched = true;
@@ -276,13 +273,13 @@ function adminRenderTokenStats() {
       + adminStatCard(adminTokenFmt(t.input), '입력 토큰')
       + adminStatCard(adminTokenFmt(t.output), '출력 토큰')
       + adminStatCard(adminTokenFmt(t.total), '총 토큰')
-      + adminStatCard(costLabel, '예상 비용(유료 환산)');
+      + adminStatCard(costLabel, 'Claude 예상 비용');
   }
   var noteEl = document.getElementById('admin-token-cost-note');
   if (noteEl) {
     noteEl.textContent = costUsd === null
-      ? '예상 비용은 알려진 모델 단가와 매칭되는 경우에만 계산됩니다.'
-      : '예상 비용은 각 모델의 유료 API 단가 기준 추정치입니다(약 ' + adminNumFmt(Math.round(costUsd * ADMIN_USD_TO_KRW)) + '원, 환율 1450원/$ 기준). 현재 Gemini는 무료 티어 키를 사용 중이라 실제 청구액은 이보다 적거나 0원일 수 있습니다.';
+      ? 'Claude 사용 내역이 없어 예상 비용을 계산할 수 없습니다.'
+      : 'Claude 유료 API 단가 기준 추정치입니다(Gemini는 무료 티어 키 사용 중이라 제외).';
   }
 
   var actionBody = document.getElementById('admin-token-by-action-body');
