@@ -140,13 +140,13 @@ function blogSleep(ms) {
 // 화면에 "다시 시도해주세요" 문구를 바로 보여주지 말고, 백그라운드에서 조용히 여러 번
 // 재시도한 뒤 그래도 안 되면 그때만 에러를 던진다. 사용자는 그동안 기존 "생성중..." 버튼
 // 문구만 계속 보게 된다.
-async function blogCallClaude(systemPrompt, userContent, maxTokens) {
+async function blogCallClaude(systemPrompt, userContent, maxTokens, actionKey) {
   var maxAttempts = 4;
   var delay = 4000;
   var lastErr;
   for (var attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      var data = await claudeProxyCall({ model: getModel('claude'), max_tokens: maxTokens || 2048, system: systemPrompt, messages: [{ role: 'user', content: userContent }] });
+      var data = await claudeProxyCall({ model: getModel('claude'), max_tokens: maxTokens || 2048, system: systemPrompt, messages: [{ role: 'user', content: userContent }] }, actionKey);
       var text = data && data.content && data.content[0] && data.content[0].text;
       if (!text) throw new Error('AI로부터 빈 응답을 받았습니다.');
       return text;
@@ -161,8 +161,8 @@ async function blogCallClaude(systemPrompt, userContent, maxTokens) {
   throw new Error((lastErr && lastErr.message) || '생성에 실패했습니다. 잠시 후 다시 시도해 주세요.');
 }
 
-async function blogCall(systemPrompt, userContent, maxTokens) {
-  return blogCallClaude(systemPrompt, userContent, maxTokens);
+async function blogCall(systemPrompt, userContent, maxTokens, actionKey) {
+  return blogCallClaude(systemPrompt, userContent, maxTokens, actionKey);
 }
 
 function blogCleanJson(text) {
@@ -215,13 +215,13 @@ function blogParseJson(text) {
 // 파싱 실패 시 더 큰 max_tokens로 재시도하기 전에, 추가 API 호출 없이 되는 blogRepairJson(잘린
 // JSON 복구)을 먼저 시도한다 — 응답이 살짝 잘린 경우는 대부분 이걸로 복구되므로, 매번 두 배
 // 큰 토큰으로 재호출하는 costly한 경로(생성 시간도 늘어나 Cloudflare 524 위험도 커짐)를 피한다.
-async function blogGenerateWithRepair(systemPrompt, userText, initialTokens, retryTokens) {
+async function blogGenerateWithRepair(systemPrompt, userText, initialTokens, retryTokens, actionKey) {
   // blogCall 자체가 던지는 경우(예: "생각" 토큰이 max_tokens를 다 써서 텍스트가 하나도
   // 없는 빈 응답)도 파싱 실패와 동일하게 재시도 대상이어야 하므로, try 안으로 감싼다 —
   // 이전엔 이 호출이 try 밖에 있어서 빈 응답이면 재시도 없이 바로 에러가 던져졌었음.
   async function attempt(tokens) {
     try {
-      return { raw: await blogCall(systemPrompt, userText, tokens), error: null };
+      return { raw: await blogCall(systemPrompt, userText, tokens, actionKey), error: null };
     } catch (e) {
       return { raw: null, error: e };
     }
@@ -460,7 +460,7 @@ async function blogAnalyzeFreeText(btn) {
   try {
     await useCreditConfirm('blog_analyze', 'AI자율분석');
     var systemPrompt = '당신은 블로그 기획 보조 도구입니다. 사용자의 자유 서술을 분석해 블로그 글 작성에 필요한 핵심 정보를 추출합니다.\n\n반드시 아래 JSON 형식으로만 응답하세요.\n{"topic":"글의 핵심 주제 한 문장 (25~50자)","keywords":"검색 키워드 3~5개, 쉼표로 구분","type":"아래 중 하나만 선택: 교육칼럼, 입시정보, 학원홍보, 합격인터뷰, 수학정보, 이벤트안내, 학원공지","mood":"아래 중 하나만 선택: 차분하고 신뢰감 있는, 친근하고 공감가는, 전문적이고 정보 중심의, 설득력 있고 참여를 유도하는, 따뜻하고 응원하는","target":"타겟 독자층 한 문장 (예: 초등 고학년 자녀를 둔 학부모)"}';
-    var raw = await blogCall(systemPrompt, input, 1024);
+    var raw = await blogCall(systemPrompt, input, 1024, 'blog_analyze');
     await useCreditCommit('blog_analyze');
     var parsed = blogParseJson(raw);
     if (parsed.topic)    document.getElementById('blog-topic').value = parsed.topic;
@@ -533,7 +533,7 @@ async function blogGenerateDraft() {
         systemPrompt += recentSummary;
       }
     }
-    var draft = await blogGenerateWithRepair(systemPrompt, blogBuildInputText(), 4096, 8192);
+    var draft = await blogGenerateWithRepair(systemPrompt, blogBuildInputText(), 4096, 8192, 'blog_generate');
     await useCreditCommit('blog_generate');
     blogState.draft = draft;
     blogRenderOutline(draft);
@@ -617,7 +617,7 @@ async function blogFinalize(triggerBtn) {
       + '- structure(구조 유형)를 유지한다.\n'
       + '- 결론은 ctaDirection 방향으로 마무리한다.\n'
       + '- 추가 수정 요청이 설계도와 충돌하지 않는 한 설계도를 유지한다.';
-    var result = await blogGenerateWithRepair(applyAcademyVars(getBlogFinalSystem()), userMsg, 8192, 16000);
+    var result = await blogGenerateWithRepair(applyAcademyVars(getBlogFinalSystem()), userMsg, 8192, 16000, 'blog_finalize');
     await useCreditCommit('blog_finalize');
     var bannedFound = blogFilterBannedWords(result);
     blogStripBold(result);

@@ -2,7 +2,7 @@
 // Sheets API 왕복이 없어지고, Worker 내부에서 로컬 SQLite 쿼리로 끝나 응답 속도가 크게 개선됨.
 // 클라이언트(js/common.js)는 전혀 수정 불필요 — 액션/응답 형태 100% 동일하게 유지.
 import { sendMail } from './mail.js';
-const ADMIN_ACTIONS = ['adminListUsers', 'adminUpdateUser', 'adminApproveUser', 'adminGetConfig', 'adminSetConfigValue', 'adminSetModels', 'adminSetCreditCost', 'adminAddAnnouncement', 'adminUpdateAnnouncement', 'adminDeleteAnnouncement', 'adminListPosts', 'adminDeletePost', 'adminValidatePostAI', 'adminGetPostValidations', 'adminSetValidationDecision', 'adminListPromptVersions', 'adminGetPromptVersionDetail', 'adminActivatePromptVersion', 'adminGenerateAiPromptRevision', 'adminCreditStats'];
+const ADMIN_ACTIONS = ['adminListUsers', 'adminUpdateUser', 'adminApproveUser', 'adminGetConfig', 'adminSetConfigValue', 'adminSetModels', 'adminSetCreditCost', 'adminAddAnnouncement', 'adminUpdateAnnouncement', 'adminDeleteAnnouncement', 'adminListPosts', 'adminDeletePost', 'adminValidatePostAI', 'adminGetPostValidations', 'adminSetValidationDecision', 'adminListPromptVersions', 'adminGetPromptVersionDetail', 'adminActivatePromptVersion', 'adminGenerateAiPromptRevision', 'adminCreditStats', 'adminTokenStats', 'adminTokenLogDetail'];
 // getActiveBlogPrompt: 관리자 전용이 아님 — 블로그를 쓰는 모든 로그인 사용자가 글 작성 시마다 호출.
 const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus', 'creditHistory', 'creditQuote', 'getAnnouncements', 'getActiveBlogPrompt', 'myProfile', 'changePassword', ...ADMIN_ACTIONS];
 
@@ -462,21 +462,34 @@ async function getActiveProviderConfig(env) {
   return { ok: true, provider, apiKey, models };
 }
 
+// 실제 토큰 사용량 기록 — 관리자 통계(토큰 사용량) 탭 전용, 크레딧 차감과는 무관하게
+// 순수 모니터링 목적. relay가 usage를 못 돌려준 경우(에러 응답, 구버전 등)는 조용히 건너뜀.
+async function logTokenUsage(env, userId, actionKey, provider, model, usage) {
+  if (!usage) return;
+  const input = usage.input || 0;
+  const output = usage.output || 0;
+  await env.DB.prepare(
+    'INSERT INTO token_log (created_at, user_id, action_key, provider, model, input_tokens, output_tokens, total_tokens) VALUES (?,?,?,?,?,?,?,?)'
+  ).bind(nowKST(), userId || '', actionKey || '', provider || '', model || '', input, output, input + output).run();
+}
+
 // 활성 프로바이더(키가 채워진 첫 프로바이더)로 1회 호출.
 // gemini가 활성인 경우에만 config의 모델 목록 전체를 폴백용으로 함께 넘긴다.
-async function claudeProxy(env, payload) {
+async function claudeProxy(env, payload, actionKey, userId) {
   const cfg = await getActiveProviderConfig(env);
   if (!cfg.ok) return cfg;
-  return runWithGenLock(env, () => callAiRelay(env, {
+  const result = await runWithGenLock(env, () => callAiRelay(env, {
     provider: cfg.provider, apiKey: cfg.apiKey, models: cfg.models,
     system: (payload && payload.system) || '',
     messages: (payload && payload.messages) || [],
     max_tokens: payload && payload.max_tokens
   }));
+  if (result.ok) await logTokenUsage(env, userId, actionKey, cfg.provider, result.model, result.usage);
+  return result;
 }
 
 // 뉴스 소재추천/지역 트렌드 리포트 전용, 항상 Gemini만 사용.
-async function geminiProxy(env, payload) {
+async function geminiProxy(env, payload, actionKey, userId) {
   const row = await getConfigRow(env, 'GEMINI_API_KEY');
   const apiKey = row && row.value;
   if (!apiKey) return { ok: false, error: 'config에 GEMINI_API_KEY가 아직 설정되지 않았습니다.' };
@@ -490,6 +503,7 @@ async function geminiProxy(env, payload) {
     max_tokens: payload && payload.max_tokens
   }));
   if (!result.ok) return result;
+  await logTokenUsage(env, userId, actionKey, 'gemini', result.model, result.usage);
   return { ok: true, text: result.text, model: result.model };
 }
 
@@ -515,6 +529,42 @@ async function adminCreditStats(env) {
     "SELECT item, COUNT(*) as cnt, SUM(-delta) as spent FROM credit_log WHERE type='사용' GROUP BY item ORDER BY spent DESC"
   ).all();
   return { ok: true, stats: results };
+}
+
+// 관리자 통계 탭 — 토큰 사용량(기간 필터 + 기능별/사용자별 집계). token_log(logTokenUsage 참고)
+// created_at이 'YYYY-MM-DD HH:MM' 문자열이라 'YYYY-MM-DD' 접두 비교로 기간 필터가 그대로 됨
+// (2026-09-08). from/to가 비어있으면 전체 기간.
+async function adminTokenStats(env, from, to) {
+  const fromB = from || '0000-00-00';
+  const toB = (to || '9999-12-31') + ' 23:59';
+  const byAction = await env.DB.prepare(
+    'SELECT action_key, COUNT(*) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ? GROUP BY action_key ORDER BY total DESC'
+  ).bind(fromB, toB).all();
+  const byUser = await env.DB.prepare(
+    'SELECT user_id, COUNT(*) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ? GROUP BY user_id ORDER BY total DESC'
+  ).bind(fromB, toB).all();
+  const totals = await env.DB.prepare(
+    'SELECT COUNT(*) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ?'
+  ).bind(fromB, toB).first();
+  return {
+    ok: true,
+    byAction: byAction.results.map((r) => ({ ...r, label: ACTION_LABELS[r.action_key] || r.action_key || '(미지정)' })),
+    byUser: byUser.results,
+    totals: totals || { cnt: 0, input: 0, output: 0, total: 0 }
+  };
+}
+
+// 통계 표의 행(기능별/사용자별)을 클릭했을 때 실제 호출 이력을 보여주는 드릴다운.
+async function adminTokenLogDetail(env, from, to, actionKey, userId) {
+  const fromB = from || '0000-00-00';
+  const toB = (to || '9999-12-31') + ' 23:59';
+  let sql = 'SELECT created_at, user_id, action_key, provider, model, input_tokens, output_tokens, total_tokens FROM token_log WHERE created_at >= ? AND created_at <= ?';
+  const binds = [fromB, toB];
+  if (actionKey) { sql += ' AND action_key = ?'; binds.push(actionKey); }
+  if (userId) { sql += ' AND user_id = ?'; binds.push(userId); }
+  sql += ' ORDER BY created_at DESC LIMIT 300';
+  const { results } = await env.DB.prepare(sql).bind(...binds).all();
+  return { ok: true, rows: results.map((r) => ({ ...r, label: ACTION_LABELS[r.action_key] || r.action_key || '(미지정)' })) };
 }
 
 async function adminUpdateUser(env, id, patch) {
@@ -1199,9 +1249,11 @@ export default {
         if (data.action === 'adminSetModels') return jsonResponse(await adminSetModels(env, data.provider || '', data.models || []));
         if (data.action === 'adminSetCreditCost') return jsonResponse(await adminSetCreditCost(env, data.actionKey || '', data.cost));
         if (data.action === 'adminCreditStats') return jsonResponse(await adminCreditStats(env));
+        if (data.action === 'adminTokenStats') return jsonResponse(await adminTokenStats(env, data.from || '', data.to || ''));
+        if (data.action === 'adminTokenLogDetail') return jsonResponse(await adminTokenLogDetail(env, data.from || '', data.to || '', data.actionKey || '', data.filterUserId || ''));
         if (data.action === 'myPosts') return jsonResponse({ ok: true, posts: await getMyPosts(env, data.userId, data.n || 100) });
-        if (data.action === 'claudeProxy') return aiJsonResponse(await claudeProxy(env, data.payload));
-        if (data.action === 'geminiProxy') return aiJsonResponse(await geminiProxy(env, data.payload));
+        if (data.action === 'claudeProxy') return aiJsonResponse(await claudeProxy(env, data.payload, data.actionKey || '', data.userId));
+        if (data.action === 'geminiProxy') return aiJsonResponse(await geminiProxy(env, data.payload, data.actionKey || '', data.userId));
         if (data.action === 'feedbackList') return jsonResponse(await getFeedbackThreads(env, data.userId, v.role || ''));
         if (data.action === 'feedbackPost') return jsonResponse(await postFeedback(env, data.userId, v, data.content || ''));
         if (data.action === 'feedbackReply') return jsonResponse(await replyFeedback(env, data.userId, v, data.threadId || '', data.content || ''));

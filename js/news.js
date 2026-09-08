@@ -116,13 +116,13 @@ async function fetchNewsTopics() {
 
   var systemPrompt = buildNewsTopicSystem();
   var userContent = JSON.stringify(trimmed);
-  var raw = await geminiProxyCall({ model: getModel('gemini'), system: systemPrompt, content: userContent, max_tokens: 3500 });
+  var raw = await geminiProxyCall({ model: getModel('gemini'), system: systemPrompt, content: userContent, max_tokens: 3500 }, 'topic_suggest_combined');
   var parsed;
   try {
     parsed = blogParseJson(raw);
   } catch (parseErr) {
     // 응답이 잘렸거나 잡담이 섞였을 가능성 → 더 큰 토큰으로 1회 재시도
-    raw = await geminiProxyCall({ model: getModel('gemini'), system: systemPrompt, content: userContent, max_tokens: 8192 });
+    raw = await geminiProxyCall({ model: getModel('gemini'), system: systemPrompt, content: userContent, max_tokens: 8192 }, 'topic_suggest_combined');
     try {
       parsed = blogParseJson(raw);
     } catch (parseErr2) {
@@ -164,7 +164,7 @@ async function fetchRegionTopics(region, onProgress) {
     var parsedChunk = null;
     for (var attempt = 0; attempt < 2 && !parsedChunk; attempt++) {
       try {
-        var rawChunk = await geminiProxyCall({ model: getModel('gemini'), system: mapSystem, content: JSON.stringify(chunks[i]), max_tokens: 2000 });
+        var rawChunk = await geminiProxyCall({ model: getModel('gemini'), system: mapSystem, content: JSON.stringify(chunks[i]), max_tokens: 2000 }, 'topic_suggest_combined');
         parsedChunk = blogParseJson(rawChunk);
       } catch (chunkErr) {
         console.warn('지역 트렌드 소재 묶음 ' + (i + 1) + ' 분석 실패(시도 ' + (attempt + 1) + '):', chunkErr.message);
@@ -182,12 +182,12 @@ async function fetchRegionTopics(region, onProgress) {
   if (onProgress) onProgress('지역 트렌드 소재 최종 정리 중...');
   var reduceSystem = buildRegionTopicReduceSystem();
   var userContent = JSON.stringify(candidates);
-  var raw = await geminiProxyCall({ model: getModel('gemini'), system: reduceSystem, content: userContent, max_tokens: 3500 });
+  var raw = await geminiProxyCall({ model: getModel('gemini'), system: reduceSystem, content: userContent, max_tokens: 3500 }, 'topic_suggest_combined');
   var parsed;
   try {
     parsed = blogParseJson(raw);
   } catch (parseErr) {
-    raw = await geminiProxyCall({ model: getModel('gemini'), system: reduceSystem, content: userContent, max_tokens: 8192 });
+    raw = await geminiProxyCall({ model: getModel('gemini'), system: reduceSystem, content: userContent, max_tokens: 8192 }, 'topic_suggest_combined');
     try {
       parsed = blogParseJson(raw);
     } catch (parseErr2) {

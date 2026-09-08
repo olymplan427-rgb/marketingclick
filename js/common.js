@@ -417,7 +417,9 @@ function _checkAutoLogout() {
 setInterval(_checkAutoLogout, 5 * 60 * 1000);
 
 // ── Claude 프록시 (관리자 키로 서버측 호출 — 클라이언트는 Claude API 키를 절대 갖지 않음) ──
-async function claudeProxyCall(payload) {
+// actionKey를 넘기면 서버가 관리자 통계(토큰 사용량)에 어떤 기능이 이 호출을 냈는지 남긴다 —
+// 크레딧 차감과는 무관, 순수 모니터링용(2026-09-08). 생략해도 호출 자체는 그대로 동작함.
+async function claudeProxyCall(payload, actionKey) {
   var auth = getUserAuth();
   if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
   var cfg = getGasConfig();
@@ -425,7 +427,7 @@ async function claudeProxyCall(payload) {
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS는 OPTIONS(preflight)를 못 받으므로 simple-request로 보냄
-    body: JSON.stringify({ action: 'claudeProxy', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), payload: payload })
+    body: JSON.stringify({ action: 'claudeProxy', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), payload: payload, actionKey: actionKey || '' })
   });
   if (!json.ok) throw new Error(json.error || 'Claude 요청 실패');
   return json.data;
@@ -456,7 +458,7 @@ async function _fetchGasJson(url, options) {
 }
 
 // Gemini 프록시 (뉴스 소재 추천 등 텍스트 전용 호출) — { model, system, content, max_tokens } 형태
-async function geminiProxyCall(payload) {
+async function geminiProxyCall(payload, actionKey) {
   var auth = getUserAuth();
   if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
   var cfg = getGasConfig();
@@ -464,7 +466,7 @@ async function geminiProxyCall(payload) {
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS는 OPTIONS(preflight)를 못 받으므로 simple-request로 보냄
-    body: JSON.stringify({ action: 'geminiProxy', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), payload: payload })
+    body: JSON.stringify({ action: 'geminiProxy', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), payload: payload, actionKey: actionKey || '' })
   });
   if (!json.ok) throw new Error(json.error || 'Gemini 요청 실패');
   return json.text;
@@ -709,6 +711,14 @@ async function adminSetCreditCost(actionKey, cost) {
 async function adminCreditStats() {
   var json = await _adminCall('adminCreditStats');
   return json.stats || [];
+}
+async function adminTokenStats(from, to) {
+  var json = await _adminCall('adminTokenStats', { from: from || '', to: to || '' });
+  return { byAction: json.byAction || [], byUser: json.byUser || [], totals: json.totals || { cnt: 0, input: 0, output: 0, total: 0 } };
+}
+async function adminTokenLogDetail(from, to, actionKey, filterUserId) {
+  var json = await _adminCall('adminTokenLogDetail', { from: from || '', to: to || '', actionKey: actionKey || '', filterUserId: filterUserId || '' });
+  return json.rows || [];
 }
 
 // ── 공지사항 (홈 페이지) ────────────────────────────────────────
