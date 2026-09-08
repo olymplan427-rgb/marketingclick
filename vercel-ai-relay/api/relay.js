@@ -95,18 +95,29 @@ async function callGeminiOnce(apiKey, model, system, messages, maxTokens, timeou
 // 8초로 둔 이유: 1차 모델(품질이 가장 좋은 모델)은 그대로 유지하고 싶어서 순위를 안 바꾸는 대신,
 // 한도초과 조합 하나당 날리는 시간을 최소화해 뒤쪽의 한도 여유 있는 폴백까지 실제로 도달하게 함
 // (15초일 때는 앞의 3개 한도초과 모델만으로 45초를 다 써서 마지막 폴백을 아예 못 써보고 실패했음 — 2026-09-02 실측).
+//
+// 다만 8초는 "한도초과(응답 없이 멈춤)" 조합을 빨리 넘기기 위한 값이라, 한도는 안 찼는데 그냥
+// 처리가 느린(멀쩡히 응답은 오지만 8초를 넘기는) 정상 케이스까지 매번 타임아웃으로 끊어버려서
+// "지역 트렌드 리포트/AI 소재추천"에서 반복적으로 "Gemini 응답 지연" 실패가 뜨는 문제가 실사용에서
+// 확인됨(2026-09-08 피드백). 그래서 맨 처음 시도하는 조합(가장 우선순위 높은 모델·키 — 대부분
+// 이 조합이 결국 성공하는 정상 케이스)만 더 길게 기다려주고, 그 다음부터의 폴백 조합은 기존처럼
+// 짧게 유지해 "몇 개 남았는지도 모르고 예산을 다 날리는" 원래 문제는 다시 만들지 않는다.
 const GEMINI_BUDGET_MS = 50000; // maxDuration 60초 중 여유 10초를 남김
-const GEMINI_PER_ATTEMPT_TIMEOUT_MS = 8000; // 조합 1개당 최대 대기 — 이 시간 안에 응답 없으면 다음 조합으로
+const GEMINI_FIRST_ATTEMPT_TIMEOUT_MS = 20000; // 맨 처음(가장 우선순위 높은) 조합만 더 길게 대기
+const GEMINI_PER_ATTEMPT_TIMEOUT_MS = 8000; // 그 다음 폴백 조합들의 최대 대기 — 이 시간 안에 응답 없으면 다음 조합으로
 const GEMINI_MIN_ATTEMPT_MS = 4000; // 이 시간도 못 줄 만큼 예산이 없으면 재시도 포기
 async function callGemini(apiKeys, models, system, messages, maxTokens) {
   const deadline = Date.now() + GEMINI_BUDGET_MS;
   let lastErr = null;
+  let isFirst = true;
   for (const model of models) {
     for (const apiKey of apiKeys) {
       const remaining = deadline - Date.now();
       if (remaining < GEMINI_MIN_ATTEMPT_MS) return { ok: false, error: lastErr || 'Gemini 모든 조합 실패' };
-      const timeout = Math.min(remaining, GEMINI_PER_ATTEMPT_TIMEOUT_MS);
+      const perAttempt = isFirst ? GEMINI_FIRST_ATTEMPT_TIMEOUT_MS : GEMINI_PER_ATTEMPT_TIMEOUT_MS;
+      const timeout = Math.min(remaining, perAttempt);
       const r = await callGeminiOnce(apiKey, model, system, messages, maxTokens, timeout);
+      isFirst = false;
       if (r.ok) return { ok: true, data: { content: [{ text: r.text }] }, text: r.text, model, usage: r.usage };
       lastErr = r.error;
     }
