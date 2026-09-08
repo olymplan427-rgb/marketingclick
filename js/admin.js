@@ -200,9 +200,19 @@ async function adminLoadTokenStats() {
   }
 }
 
-// 천 단위 콤마 — 토큰 수는 자릿수가 커서(수만 단위) 콤마 없이는 크기 가늠이 안 됨(2026-09-08 피드백).
+// 천 단위 콤마 — 호출 횟수처럼 작은 수치용(2026-09-08 피드백: 콤마 없이는 크기 가늠이 안 됨).
 function adminNumFmt(n) {
   return Number(n || 0).toLocaleString('ko-KR');
+}
+
+// 토큰 수치 전용 — 자릿수가 너무 커서(수만~수십만) 일의 자리까지 다 보여주면 오히려 안 읽히므로
+// 1000 이상은 K 단위로 축약해서 보여줌(2026-09-08 피드백: "일의 자리까지 다 보여주지 말고 K형태로").
+function adminTokenFmt(n) {
+  n = Number(n || 0);
+  if (n < 1000) return adminNumFmt(n);
+  var k = n / 1000;
+  var s = k >= 100 ? k.toFixed(0) : k.toFixed(1).replace(/\.0$/, '');
+  return s + 'K';
 }
 
 function adminRenderTokenStats() {
@@ -213,9 +223,9 @@ function adminRenderTokenStats() {
   var summaryEl = document.getElementById('admin-stat-tokens');
   if (summaryEl) {
     summaryEl.innerHTML = adminStatCard(adminNumFmt(t.cnt), '총 호출')
-      + adminStatCard(adminNumFmt(t.input), '입력 토큰')
-      + adminStatCard(adminNumFmt(t.output), '출력 토큰')
-      + adminStatCard(adminNumFmt(t.total), '총 토큰')
+      + adminStatCard(adminTokenFmt(t.input), '입력 토큰')
+      + adminStatCard(adminTokenFmt(t.output), '출력 토큰')
+      + adminStatCard(adminTokenFmt(t.total), '총 토큰')
       + adminStatCard(costLabel, '예상 비용(유료 환산)');
   }
   var noteEl = document.getElementById('admin-token-cost-note');
@@ -234,7 +244,7 @@ function adminRenderTokenStats() {
           return '<tr class="admin-token-row" onclick="adminShowTokenDetail(\'action\',\'' + adminEsc(s.action_key) + '\')">'
             + '<td style="padding:8px;">' + adminEsc(s.label) + '</td>'
             + '<td style="padding:8px;">' + adminNumFmt(s.cnt) + '</td>'
-            + '<td style="padding:8px;">' + adminNumFmt(s.total) + '</td>'
+            + '<td style="padding:8px;">' + adminTokenFmt(s.total) + '</td>'
           + '</tr>';
         }).join('')
       : '<tr><td colspan="3" style="padding:8px;color:var(--mut);">내역 없음</td></tr>';
@@ -248,7 +258,7 @@ function adminRenderTokenStats() {
           return '<tr class="admin-token-row" onclick="adminShowTokenDetail(\'user\',\'' + adminEsc(s.user_id) + '\')">'
             + '<td style="padding:8px;">' + adminEsc(s.user_id || '(알 수 없음)') + '</td>'
             + '<td style="padding:8px;">' + adminNumFmt(s.cnt) + '</td>'
-            + '<td style="padding:8px;">' + adminNumFmt(s.total) + '</td>'
+            + '<td style="padding:8px;">' + adminTokenFmt(s.total) + '</td>'
           + '</tr>';
         }).join('')
       : '<tr><td colspan="3" style="padding:8px;color:var(--mut);">내역 없음</td></tr>';
@@ -263,9 +273,9 @@ function adminRenderTokenStats() {
           return '<tr class="admin-token-row" onclick="adminShowTokenDetail(\'provider\',\'' + adminEsc(s.provider) + '\')">'
             + '<td style="padding:8px;">' + adminEsc(name) + '</td>'
             + '<td style="padding:8px;">' + adminNumFmt(s.cnt) + '</td>'
-            + '<td style="padding:8px;">' + adminNumFmt(s.input) + '</td>'
-            + '<td style="padding:8px;">' + adminNumFmt(s.output) + '</td>'
-            + '<td style="padding:8px;">' + adminNumFmt(s.total) + '</td>'
+            + '<td style="padding:8px;">' + adminTokenFmt(s.input) + '</td>'
+            + '<td style="padding:8px;">' + adminTokenFmt(s.output) + '</td>'
+            + '<td style="padding:8px;">' + adminTokenFmt(s.total) + '</td>'
           + '</tr>';
         }).join('')
       : '<tr><td colspan="5" style="padding:8px;color:var(--mut);">내역 없음</td></tr>';
@@ -287,7 +297,7 @@ function adminRenderTokenDailyChart() {
   var max = Math.max.apply(null, byDay.map(function(d) { return d.total || 0; })) || 1;
   chartEl.innerHTML = byDay.map(function(d) {
     var h = Math.max(2, Math.round(((d.total || 0) / max) * 116));
-    var title = d.day + ' · 호출 ' + adminNumFmt(d.cnt) + '회 · 토큰 ' + adminNumFmt(d.total);
+    var title = d.day + ' · 호출 ' + adminNumFmt(d.cnt) + '회 · 토큰 ' + adminTokenFmt(d.total);
     return '<div class="admin-token-bar" style="height:' + h + 'px;" title="' + adminEsc(title) + '"></div>';
   }).join('');
   // 막대 수가 많아지면(전체 기간 등) 라벨을 다 못 넣으니 대략 8~10개만 간격을 두고 표시
@@ -328,9 +338,9 @@ async function adminShowTokenDetail(kind, key) {
               + '<td style="padding:6px;">' + adminEsc(r.user_id) + '</td>'
               + '<td style="padding:6px;">' + adminEsc(r.label) + '</td>'
               + '<td style="padding:6px;">' + adminEsc(r.model) + '</td>'
-              + '<td style="padding:6px;">' + adminNumFmt(r.input_tokens) + '</td>'
-              + '<td style="padding:6px;">' + adminNumFmt(r.output_tokens) + '</td>'
-              + '<td style="padding:6px;">' + adminNumFmt(r.total_tokens) + '</td>'
+              + '<td style="padding:6px;">' + adminTokenFmt(r.input_tokens) + '</td>'
+              + '<td style="padding:6px;">' + adminTokenFmt(r.output_tokens) + '</td>'
+              + '<td style="padding:6px;">' + adminTokenFmt(r.total_tokens) + '</td>'
             + '</tr>';
           }).join('')
         + '</tbody></table></div>'

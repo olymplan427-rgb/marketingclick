@@ -419,7 +419,11 @@ setInterval(_checkAutoLogout, 5 * 60 * 1000);
 // ── Claude 프록시 (관리자 키로 서버측 호출 — 클라이언트는 Claude API 키를 절대 갖지 않음) ──
 // actionKey를 넘기면 서버가 관리자 통계(토큰 사용량)에 어떤 기능이 이 호출을 냈는지 남긴다 —
 // 크레딧 차감과는 무관, 순수 모니터링용(2026-09-08). 생략해도 호출 자체는 그대로 동작함.
-async function claudeProxyCall(payload, actionKey) {
+// requestId(선택): 소재추천/리포트처럼 사용자 클릭 1번에 AI 호출이 여러 번(map-reduce) 나가는
+// 흐름에서, 관리자 통계의 "호출" 수가 실제 사용자 액션 수가 아니라 내부 호출 수로 부풀려 보이는
+// 문제(2026-09-08 피드백)를 바로잡기 위한 값. 같은 사용자 액션의 여러 호출에 동일한 값을 넘기면
+// 서버가 token_log에 같이 적어두고, 통계 집계 시 이 값 기준으로 "호출 1회"로 묶어 센다.
+async function claudeProxyCall(payload, actionKey, requestId) {
   var auth = getUserAuth();
   if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
   var cfg = getGasConfig();
@@ -427,10 +431,15 @@ async function claudeProxyCall(payload, actionKey) {
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS는 OPTIONS(preflight)를 못 받으므로 simple-request로 보냄
-    body: JSON.stringify({ action: 'claudeProxy', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), payload: payload, actionKey: actionKey || '' })
+    body: JSON.stringify({ action: 'claudeProxy', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), payload: payload, actionKey: actionKey || '', requestId: requestId || '' })
   });
   if (!json.ok) throw new Error(json.error || 'Claude 요청 실패');
   return json.data;
+}
+
+// 여러 AI 호출로 이루어진 사용자 액션 하나를 식별할 고유값 — Math.random 기반으로 충분(UUID까지는 불필요).
+function newAdminRequestId() {
+  return Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
 }
 
 // 로그인/사용량 등 로그인 경로를 도는 요청들이 GAS 실행 할당량이 몰릴 때 가끔 JSON 대신
@@ -458,7 +467,7 @@ async function _fetchGasJson(url, options) {
 }
 
 // Gemini 프록시 (뉴스 소재 추천 등 텍스트 전용 호출) — { model, system, content, max_tokens } 형태
-async function geminiProxyCall(payload, actionKey) {
+async function geminiProxyCall(payload, actionKey, requestId) {
   var auth = getUserAuth();
   if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
   var cfg = getGasConfig();
@@ -466,7 +475,7 @@ async function geminiProxyCall(payload, actionKey) {
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS는 OPTIONS(preflight)를 못 받으므로 simple-request로 보냄
-    body: JSON.stringify({ action: 'geminiProxy', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), payload: payload, actionKey: actionKey || '' })
+    body: JSON.stringify({ action: 'geminiProxy', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), payload: payload, actionKey: actionKey || '', requestId: requestId || '' })
   });
   if (!json.ok) throw new Error(json.error || 'Gemini 요청 실패');
   return json.text;

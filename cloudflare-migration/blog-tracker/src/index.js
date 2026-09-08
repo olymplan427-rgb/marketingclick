@@ -464,18 +464,22 @@ async function getActiveProviderConfig(env) {
 
 // 실제 토큰 사용량 기록 — 관리자 통계(토큰 사용량) 탭 전용, 크레딧 차감과는 무관하게
 // 순수 모니터링 목적. relay가 usage를 못 돌려준 경우(에러 응답, 구버전 등)는 조용히 건너뜀.
-async function logTokenUsage(env, userId, actionKey, provider, model, usage) {
+// requestId(선택): 소재추천/리포트처럼 사용자 액션 1건에 map-reduce로 AI를 여러 번 호출하는
+// 흐름에서, 관리자 통계의 "호출" 수가 내부 호출 수로 부풀려 보이는 문제(2026-09-08 피드백)를
+// 바로잡기 위해 클라이언트가 같은 값을 여러 호출에 걸쳐 넘긴다. 안 넘기면(구버전 클라이언트,
+// 원샷 호출) null로 남고, 집계 시 행 id로 대체해 기존과 동일하게 1건씩 센다.
+async function logTokenUsage(env, userId, actionKey, provider, model, usage, requestId) {
   if (!usage) return;
   const input = usage.input || 0;
   const output = usage.output || 0;
   await env.DB.prepare(
-    'INSERT INTO token_log (created_at, user_id, action_key, provider, model, input_tokens, output_tokens, total_tokens) VALUES (?,?,?,?,?,?,?,?)'
-  ).bind(nowKST(), userId || '', actionKey || '', provider || '', model || '', input, output, input + output).run();
+    'INSERT INTO token_log (created_at, user_id, action_key, provider, model, input_tokens, output_tokens, total_tokens, request_id) VALUES (?,?,?,?,?,?,?,?,?)'
+  ).bind(nowKST(), userId || '', actionKey || '', provider || '', model || '', input, output, input + output, requestId || null).run();
 }
 
 // 활성 프로바이더(키가 채워진 첫 프로바이더)로 1회 호출.
 // gemini가 활성인 경우에만 config의 모델 목록 전체를 폴백용으로 함께 넘긴다.
-async function claudeProxy(env, payload, actionKey, userId) {
+async function claudeProxy(env, payload, actionKey, userId, requestId) {
   const cfg = await getActiveProviderConfig(env);
   if (!cfg.ok) return cfg;
   const result = await runWithGenLock(env, () => callAiRelay(env, {
@@ -484,12 +488,12 @@ async function claudeProxy(env, payload, actionKey, userId) {
     messages: (payload && payload.messages) || [],
     max_tokens: payload && payload.max_tokens
   }));
-  if (result.ok) await logTokenUsage(env, userId, actionKey, cfg.provider, result.model, result.usage);
+  if (result.ok) await logTokenUsage(env, userId, actionKey, cfg.provider, result.model, result.usage, requestId);
   return result;
 }
 
 // 뉴스 소재추천/지역 트렌드 리포트 전용, 항상 Gemini만 사용.
-async function geminiProxy(env, payload, actionKey, userId) {
+async function geminiProxy(env, payload, actionKey, userId, requestId) {
   const row = await getConfigRow(env, 'GEMINI_API_KEY');
   const apiKey = row && row.value;
   if (!apiKey) return { ok: false, error: 'config에 GEMINI_API_KEY가 아직 설정되지 않았습니다.' };
@@ -503,7 +507,7 @@ async function geminiProxy(env, payload, actionKey, userId) {
     max_tokens: payload && payload.max_tokens
   }));
   if (!result.ok) return result;
-  await logTokenUsage(env, userId, actionKey, 'gemini', result.model, result.usage);
+  await logTokenUsage(env, userId, actionKey, 'gemini', result.model, result.usage, requestId);
   return { ok: true, text: result.text, model: result.model };
 }
 
@@ -537,11 +541,14 @@ async function adminCreditStats(env) {
 async function adminTokenStats(env, from, to) {
   const fromB = from || '0000-00-00';
   const toB = (to || '9999-12-31') + ' 23:59';
+  // COUNT(DISTINCT COALESCE(request_id, 'row:'||id)) — map-reduce로 AI를 여러 번 호출해도 같은
+  // request_id를 공유하면 "호출 1건"으로 묶어 센다(2026-09-08 피드백: "사실 1회 호출인데 뒷쪽에서
+  // AI만 여러번 호출되고 있는 형태"). request_id가 없는(구버전/원샷) 행은 id로 대체해 종전과 동일하게 1건씩.
   const byAction = await env.DB.prepare(
-    'SELECT action_key, COUNT(*) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ? GROUP BY action_key ORDER BY total DESC'
+    "SELECT action_key, COUNT(DISTINCT COALESCE(request_id, 'row:'||id)) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ? GROUP BY action_key ORDER BY total DESC"
   ).bind(fromB, toB).all();
   const byUser = await env.DB.prepare(
-    'SELECT user_id, COUNT(*) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ? GROUP BY user_id ORDER BY total DESC'
+    "SELECT user_id, COUNT(DISTINCT COALESCE(request_id, 'row:'||id)) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ? GROUP BY user_id ORDER BY total DESC"
   ).bind(fromB, toB).all();
   const byProvider = await env.DB.prepare(
     'SELECT provider, model, COUNT(*) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ? GROUP BY provider, model ORDER BY total DESC'
@@ -551,7 +558,7 @@ async function adminTokenStats(env, from, to) {
     "SELECT substr(created_at,1,10) as day, COUNT(*) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ? GROUP BY day ORDER BY day ASC"
   ).bind(fromB, toB).all();
   const totals = await env.DB.prepare(
-    'SELECT COUNT(*) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ?'
+    "SELECT COUNT(DISTINCT COALESCE(request_id, 'row:'||id)) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ?"
   ).bind(fromB, toB).first();
   return {
     ok: true,
@@ -1262,8 +1269,8 @@ export default {
         if (data.action === 'adminTokenStats') return jsonResponse(await adminTokenStats(env, data.from || '', data.to || ''));
         if (data.action === 'adminTokenLogDetail') return jsonResponse(await adminTokenLogDetail(env, data.from || '', data.to || '', data.actionKey || '', data.filterUserId || '', data.provider || ''));
         if (data.action === 'myPosts') return jsonResponse({ ok: true, posts: await getMyPosts(env, data.userId, data.n || 100) });
-        if (data.action === 'claudeProxy') return aiJsonResponse(await claudeProxy(env, data.payload, data.actionKey || '', data.userId));
-        if (data.action === 'geminiProxy') return aiJsonResponse(await geminiProxy(env, data.payload, data.actionKey || '', data.userId));
+        if (data.action === 'claudeProxy') return aiJsonResponse(await claudeProxy(env, data.payload, data.actionKey || '', data.userId, data.requestId || ''));
+        if (data.action === 'geminiProxy') return aiJsonResponse(await geminiProxy(env, data.payload, data.actionKey || '', data.userId, data.requestId || ''));
         if (data.action === 'feedbackList') return jsonResponse(await getFeedbackThreads(env, data.userId, v.role || ''));
         if (data.action === 'feedbackPost') return jsonResponse(await postFeedback(env, data.userId, v, data.content || ''));
         if (data.action === 'feedbackReply') return jsonResponse(await replyFeedback(env, data.userId, v, data.threadId || '', data.content || ''));
