@@ -143,6 +143,9 @@ async function reportGenerate(btn) {
     var chunks = [];
     for (var ci = 0; ci < itemsForAI.length; ci += REPORT_CHUNK_SIZE) chunks.push(itemsForAI.slice(ci, ci + REPORT_CHUNK_SIZE));
 
+    // 묶음별 분석 + 최종 정리 전체가 사용자 입장에서는 "리포트 생성 1회"이므로, requestId를
+    // 전부 공유해 관리자 통계에서 호출 1건으로 집계되게 함(2026-09-08 피드백).
+    var reqId = newAdminRequestId();
     var mapSystem = reportFillPlaceholders(REPORT_SYSTEM_MAP);
     var partials = [];
     var failedChunks = 0;
@@ -154,7 +157,7 @@ async function reportGenerate(btn) {
       var parsedChunk = null;
       for (var attempt = 0; attempt < 2 && !parsedChunk; attempt++) {
         try {
-          var rawChunk = await geminiProxyCall({ model: getModel('gemini'), system: mapSystem, content: JSON.stringify(chunks[i]), max_tokens: 3000 }, 'report_generate');
+          var rawChunk = await geminiProxyCall({ model: getModel('gemini'), system: mapSystem, content: JSON.stringify(chunks[i]), max_tokens: 3000 }, 'report_generate', reqId);
           parsedChunk = reportParseJsonSafe(rawChunk);
         } catch (chunkErr) {
           console.warn('리포트 묶음 ' + (i + 1) + ' 분석 실패(시도 ' + (attempt + 1) + '):', chunkErr.message);
@@ -175,7 +178,7 @@ async function reportGenerate(btn) {
     var parsed = null, reduceErr = null;
     for (var rAttempt = 0; rAttempt < 2 && !parsed; rAttempt++) {
       try {
-        var rawFinal = await geminiProxyCall({ model: getModel('gemini'), system: reduceSystem, content: JSON.stringify(reduceInput), max_tokens: 8000 }, 'report_generate');
+        var rawFinal = await geminiProxyCall({ model: getModel('gemini'), system: reduceSystem, content: JSON.stringify(reduceInput), max_tokens: 8000 }, 'report_generate', reqId);
         parsed = reportParseJsonSafe(rawFinal);
         if (!parsed) reduceErr = '최종 정리 응답 JSON 파싱 실패 — 콘솔(F12)에서 원본 응답 확인. 앞부분: ' + String(rawFinal).slice(0, 200);
       } catch (e) { reduceErr = e.message; }

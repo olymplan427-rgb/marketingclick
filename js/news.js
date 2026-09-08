@@ -116,13 +116,15 @@ async function fetchNewsTopics() {
 
   var systemPrompt = buildNewsTopicSystem();
   var userContent = JSON.stringify(trimmed);
-  var raw = await geminiProxyCall({ model: getModel('gemini'), system: systemPrompt, content: userContent, max_tokens: 3500 }, 'topic_suggest_combined');
+  // 재시도까지 포함해 한 번의 "소재추천" 요청이므로 requestId를 공유해 관리자 통계에서 호출 1건으로 집계되게 함.
+  var reqId = newAdminRequestId();
+  var raw = await geminiProxyCall({ model: getModel('gemini'), system: systemPrompt, content: userContent, max_tokens: 3500 }, 'topic_suggest_combined', reqId);
   var parsed;
   try {
     parsed = blogParseJson(raw);
   } catch (parseErr) {
     // 응답이 잘렸거나 잡담이 섞였을 가능성 → 더 큰 토큰으로 1회 재시도
-    raw = await geminiProxyCall({ model: getModel('gemini'), system: systemPrompt, content: userContent, max_tokens: 8192 }, 'topic_suggest_combined');
+    raw = await geminiProxyCall({ model: getModel('gemini'), system: systemPrompt, content: userContent, max_tokens: 8192 }, 'topic_suggest_combined', reqId);
     try {
       parsed = blogParseJson(raw);
     } catch (parseErr2) {
@@ -155,6 +157,10 @@ async function fetchRegionTopics(region, onProgress) {
   var chunks = [];
   for (var ci = 0; ci < itemsForAI.length; ci += chunkSize) chunks.push(itemsForAI.slice(ci, ci + chunkSize));
 
+  // 맵-리듀스 전체(묶음별 1차 분석 + 최종 정리)가 사용자 입장에서는 "소재추천 1회"이므로,
+  // requestId를 전부 공유해 관리자 통계에서 호출 1건으로 집계되게 함(2026-09-08 피드백).
+  var reqId = newAdminRequestId();
+
   // ① MAP — 묶음별로 소재 후보만 가볍게 추출 (각 호출이 작아 8초 타임아웃에 잘 안 걸림)
   var mapSystem = buildRegionTopicMapSystem();
   var candidates = [];
@@ -164,7 +170,7 @@ async function fetchRegionTopics(region, onProgress) {
     var parsedChunk = null;
     for (var attempt = 0; attempt < 2 && !parsedChunk; attempt++) {
       try {
-        var rawChunk = await geminiProxyCall({ model: getModel('gemini'), system: mapSystem, content: JSON.stringify(chunks[i]), max_tokens: 2000 }, 'topic_suggest_combined');
+        var rawChunk = await geminiProxyCall({ model: getModel('gemini'), system: mapSystem, content: JSON.stringify(chunks[i]), max_tokens: 2000 }, 'topic_suggest_combined', reqId);
         parsedChunk = blogParseJson(rawChunk);
       } catch (chunkErr) {
         console.warn('지역 트렌드 소재 묶음 ' + (i + 1) + ' 분석 실패(시도 ' + (attempt + 1) + '):', chunkErr.message);
@@ -182,12 +188,12 @@ async function fetchRegionTopics(region, onProgress) {
   if (onProgress) onProgress('지역 트렌드 소재 최종 정리 중...');
   var reduceSystem = buildRegionTopicReduceSystem();
   var userContent = JSON.stringify(candidates);
-  var raw = await geminiProxyCall({ model: getModel('gemini'), system: reduceSystem, content: userContent, max_tokens: 3500 }, 'topic_suggest_combined');
+  var raw = await geminiProxyCall({ model: getModel('gemini'), system: reduceSystem, content: userContent, max_tokens: 3500 }, 'topic_suggest_combined', reqId);
   var parsed;
   try {
     parsed = blogParseJson(raw);
   } catch (parseErr) {
-    raw = await geminiProxyCall({ model: getModel('gemini'), system: reduceSystem, content: userContent, max_tokens: 8192 }, 'topic_suggest_combined');
+    raw = await geminiProxyCall({ model: getModel('gemini'), system: reduceSystem, content: userContent, max_tokens: 8192 }, 'topic_suggest_combined', reqId);
     try {
       parsed = blogParseJson(raw);
     } catch (parseErr2) {
