@@ -1,7 +1,14 @@
 // 관리자 페이지 — AI 프로바이더 키/모델, 기능별 크레딧 비용, 사용자 관리(D1 직접 반영).
 // 서버(blog-tracker Worker)가 role==='관리자' 아니면 모든 admin* 액션을 거부하므로,
 // 여기서는 sidebar 노출 + 편의 UI만 담당(applyAdminVisibility는 js/common.js).
-var adminState = { config: null, users: [], notices: [], posts: [], selectedPostId: null, validationSummary: [], validationNote: '', promptVersionFilter: '', promptVersions: [], creditStats: [], feedbackThreads: [], tokenPeriod: 'today', tokenStats: { byAction: [], byUser: [], byProvider: [], byDay: [], totals: { cnt: 0, input: 0, output: 0, total: 0 } } };
+var adminState = { config: null, users: [], notices: [], posts: [], selectedPostId: null, validationSummary: [], validationNote: '', promptVersionFilter: '', promptVersions: [], creditStats: [], feedbackThreads: [], tokenPeriod: 'today', tokenStats: { byAction: [], byUser: [], byProvider: [], byDay: [], totals: { cnt: 0, input: 0, output: 0, total: 0 } }, tokenChartDays: [] };
+
+// toISOString()은 UTC 기준이라 KST 자정 근처(0~8시)에는 날짜가 하루 밀려 나오는 문제가 있어
+// (2026-09-08 실측: 이번달 1일 기본값이 08-31로 찍힘), 로컬 날짜 그대로 문자열을 만든다.
+function adminLocalDateStr(d) {
+  var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
 
 function adminEsc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -41,12 +48,13 @@ async function adminInit() {
     adminRenderStats();
     adminLoadTokenStats();
     var dateEl = document.getElementById('admin-notice-date');
-    if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+    if (dateEl && !dateEl.value) dateEl.value = adminLocalDateStr(new Date());
     var now = new Date();
     var fromEl = document.getElementById('admin-token-custom-from');
     var toEl = document.getElementById('admin-token-custom-to');
-    if (fromEl && !fromEl.value) fromEl.value = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-    if (toEl && !toEl.value) toEl.value = now.toISOString().slice(0, 10);
+    if (fromEl && !fromEl.value) fromEl.value = adminLocalDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
+    if (toEl && !toEl.value) toEl.value = adminLocalDateStr(now);
+    adminLoadTokenChart();
   } catch (e) {
     adminShowError(e.message || '관리자 정보를 불러오지 못했습니다.');
   }
@@ -118,7 +126,7 @@ function adminRenderStats() {
 // created_at 'YYYY-MM-DD' 접두 문자열 비교로 필터링(index.js의 adminTokenStats 참고).
 function adminTokenPeriodRange(period) {
   var now = new Date();
-  var fmt = function(d) { return d.toISOString().slice(0, 10); };
+  var fmt = adminLocalDateStr;
   if (period === 'today') { var t = fmt(now); return { from: t, to: t }; }
   if (period === 'yesterday') { var y = new Date(now); y.setDate(y.getDate() - 1); var yt = fmt(y); return { from: yt, to: yt }; }
   if (period === '7d') { var from7 = new Date(now); from7.setDate(from7.getDate() - 6); return { from: fmt(from7), to: fmt(now) }; }
@@ -140,8 +148,10 @@ function adminSetTokenPeriod(period) {
   adminLoadTokenStats();
 }
 
-// 날짜 직접 지정 — 프리셋 필(오늘/어제/최근7일/이번달/전체)에 없는 특정일/기간 조회용
-// (2026-09-08 피드백: "날짜를 지정해서 볼 수 있는게 있어야 할 듯").
+// 날짜 직접 지정 — 프리셋 필(오늘/어제/최근7일/이번달/전체)에 없는 특정일/기간의 표/카드 조회용
+// (2026-09-08 피드백: "날짜를 지정해서 볼 수 있는게 있어야 할 듯"). 일별 그래프는 이 값과는
+// 별개로 항상 이 날짜 범위를 그대로 따라간다(adminLoadTokenChart) — 그래프까지 "오늘" 프리셋을
+// 따라가 막대 1개가 폭 전체를 채우는 문제(2026-09-08 피드백)를 피하기 위해 분리함.
 function adminSetTokenCustomRange() {
   var fromEl = document.getElementById('admin-token-custom-from');
   var toEl = document.getElementById('admin-token-custom-to');
@@ -153,6 +163,46 @@ function adminSetTokenCustomRange() {
     if (btn) btn.classList.remove('active');
   });
   adminLoadTokenStats();
+  adminLoadTokenChart();
+}
+
+// 일별 그래프 전용 데이터 — 표/카드(adminLoadTokenStats, 프리셋 필 기준)와 달리 항상 상단
+// 날짜 입력값 범위를 그대로 쓴다. 그래서 "오늘"/"어제" 같은 프리셋을 눌러도 그래프 기간은
+// 그대로 유지되고(2026-09-08 피드백), 상단 날짜를 직접 바꿀 때만 그래프 기간이 바뀐다.
+async function adminLoadTokenChart() {
+  var fromEl = document.getElementById('admin-token-custom-from');
+  var toEl = document.getElementById('admin-token-custom-to');
+  var from = (fromEl && fromEl.value) || '';
+  var to = (toEl && toEl.value) || '';
+  if (!from || !to) return;
+  adminState.tokenChartRange = { from: from, to: to };
+  try {
+    var stats = await adminTokenStats(from, to);
+    adminState.tokenChartDays = stats.byDay || [];
+    adminRenderTokenDailyChart();
+  } catch (e) {
+    adminState.tokenChartDays = [];
+    adminRenderTokenDailyChart();
+  }
+}
+
+// from~to 사이 빠짐없이 날짜를 나열 — 데이터 없는 날은 0으로 채워서, 실제 기록이 있는 날이
+// 하루뿐이어도 그래프가 상단에 지정한 기간 폭 전체에 걸쳐 표시되게 함(2026-09-08 피드백:
+// "하루만 있다고 해도 저렇게 하나를 다 차지하면 너무 이상한데").
+function adminBuildChartDayRange(from, to, byDay) {
+  var map = {};
+  (byDay || []).forEach(function(d) { map[d.day] = d; });
+  var days = [];
+  var cur = new Date(from + 'T00:00:00');
+  var end = new Date(to + 'T00:00:00');
+  var guard = 0;
+  while (cur <= end && guard < 400) {
+    var key = adminLocalDateStr(cur);
+    days.push(map[key] || { day: key, cnt: 0, input: 0, output: 0, total: 0 });
+    cur.setDate(cur.getDate() + 1);
+    guard++;
+  }
+  return days;
 }
 
 // ── 예상 비용 환산 (참고용 추정치) ──────────────────────────────────
@@ -234,7 +284,6 @@ function adminRenderTokenStats() {
       ? '예상 비용은 알려진 모델 단가와 매칭되는 경우에만 계산됩니다.'
       : '예상 비용은 각 모델의 유료 API 단가 기준 추정치입니다(약 ' + adminNumFmt(Math.round(costUsd * ADMIN_USD_TO_KRW)) + '원, 환율 1450원/$ 기준). 현재 Gemini는 무료 티어 키를 사용 중이라 실제 청구액은 이보다 적거나 0원일 수 있습니다.';
   }
-  adminRenderTokenDailyChart();
 
   var actionBody = document.getElementById('admin-token-by-action-body');
   if (actionBody) {
@@ -284,11 +333,23 @@ function adminRenderTokenStats() {
 
 // 일별 추이 그래프 — 외부 차트 라이브러리 없이 막대 높이를 순수 CSS/JS로 계산해서 그림
 // (2026-09-08 피드백: "기본으로 보이는 것은 매일 그래프형태로 할까?" → 기본 뷰에 항상 표시).
+// 표/카드와 달리 프리셋 필이 아니라 상단 날짜 범위(adminState.tokenChartRange)를 그대로 따라간다
+// (2026-09-08 피드백: "그래프 노출 기간은 상단에 날짜를 기준으로 보여주게 해줘").
 function adminRenderTokenDailyChart() {
   var chartEl = document.getElementById('admin-token-daily-chart');
   var labelsEl = document.getElementById('admin-token-daily-labels');
+  var titleEl = document.getElementById('admin-token-daily-title');
   if (!chartEl) return;
-  var byDay = adminState.tokenStats.byDay || [];
+  var range = adminState.tokenChartRange || {};
+  if (titleEl && range.from && range.to) {
+    titleEl.textContent = range.from === range.to ? range.from : (range.from + ' ~ ' + range.to);
+  }
+  if (!range.from || !range.to) {
+    chartEl.innerHTML = '<div style="width:100%;text-align:center;color:var(--mut);font-size:12px;align-self:center;">기간을 지정하세요</div>';
+    if (labelsEl) labelsEl.innerHTML = '';
+    return;
+  }
+  var byDay = adminBuildChartDayRange(range.from, range.to, adminState.tokenChartDays);
   if (!byDay.length) {
     chartEl.innerHTML = '<div style="width:100%;text-align:center;color:var(--mut);font-size:12px;align-self:center;">내역 없음</div>';
     if (labelsEl) labelsEl.innerHTML = '';
