@@ -543,6 +543,9 @@ async function adminTokenStats(env, from, to) {
   const byUser = await env.DB.prepare(
     'SELECT user_id, COUNT(*) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ? GROUP BY user_id ORDER BY total DESC'
   ).bind(fromB, toB).all();
+  const byProvider = await env.DB.prepare(
+    'SELECT provider, model, COUNT(*) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ? GROUP BY provider, model ORDER BY total DESC'
+  ).bind(fromB, toB).all();
   const totals = await env.DB.prepare(
     'SELECT COUNT(*) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ?'
   ).bind(fromB, toB).first();
@@ -550,18 +553,20 @@ async function adminTokenStats(env, from, to) {
     ok: true,
     byAction: byAction.results.map((r) => ({ ...r, label: ACTION_LABELS[r.action_key] || r.action_key || '(미지정)' })),
     byUser: byUser.results,
+    byProvider: byProvider.results,
     totals: totals || { cnt: 0, input: 0, output: 0, total: 0 }
   };
 }
 
 // 통계 표의 행(기능별/사용자별)을 클릭했을 때 실제 호출 이력을 보여주는 드릴다운.
-async function adminTokenLogDetail(env, from, to, actionKey, userId) {
+async function adminTokenLogDetail(env, from, to, actionKey, userId, provider) {
   const fromB = from || '0000-00-00';
   const toB = (to || '9999-12-31') + ' 23:59';
   let sql = 'SELECT created_at, user_id, action_key, provider, model, input_tokens, output_tokens, total_tokens FROM token_log WHERE created_at >= ? AND created_at <= ?';
   const binds = [fromB, toB];
   if (actionKey) { sql += ' AND action_key = ?'; binds.push(actionKey); }
   if (userId) { sql += ' AND user_id = ?'; binds.push(userId); }
+  if (provider) { sql += ' AND provider = ?'; binds.push(provider); }
   sql += ' ORDER BY created_at DESC LIMIT 300';
   const { results } = await env.DB.prepare(sql).bind(...binds).all();
   return { ok: true, rows: results.map((r) => ({ ...r, label: ACTION_LABELS[r.action_key] || r.action_key || '(미지정)' })) };
@@ -1250,7 +1255,7 @@ export default {
         if (data.action === 'adminSetCreditCost') return jsonResponse(await adminSetCreditCost(env, data.actionKey || '', data.cost));
         if (data.action === 'adminCreditStats') return jsonResponse(await adminCreditStats(env));
         if (data.action === 'adminTokenStats') return jsonResponse(await adminTokenStats(env, data.from || '', data.to || ''));
-        if (data.action === 'adminTokenLogDetail') return jsonResponse(await adminTokenLogDetail(env, data.from || '', data.to || '', data.actionKey || '', data.filterUserId || ''));
+        if (data.action === 'adminTokenLogDetail') return jsonResponse(await adminTokenLogDetail(env, data.from || '', data.to || '', data.actionKey || '', data.filterUserId || '', data.provider || ''));
         if (data.action === 'myPosts') return jsonResponse({ ok: true, posts: await getMyPosts(env, data.userId, data.n || 100) });
         if (data.action === 'claudeProxy') return aiJsonResponse(await claudeProxy(env, data.payload, data.actionKey || '', data.userId));
         if (data.action === 'geminiProxy') return aiJsonResponse(await geminiProxy(env, data.payload, data.actionKey || '', data.userId));

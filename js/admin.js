@@ -139,14 +139,19 @@ async function adminLoadTokenStats() {
   }
 }
 
+// 천 단위 콤마 — 토큰 수는 자릿수가 커서(수만 단위) 콤마 없이는 크기 가늠이 안 됨(2026-09-08 피드백).
+function adminNumFmt(n) {
+  return Number(n || 0).toLocaleString('ko-KR');
+}
+
 function adminRenderTokenStats() {
   var t = adminState.tokenStats.totals || {};
   var summaryEl = document.getElementById('admin-stat-tokens');
   if (summaryEl) {
-    summaryEl.innerHTML = adminStatCard(t.cnt || 0, '총 호출')
-      + adminStatCard(t.input || 0, '입력 토큰')
-      + adminStatCard(t.output || 0, '출력 토큰')
-      + adminStatCard(t.total || 0, '총 토큰');
+    summaryEl.innerHTML = adminStatCard(adminNumFmt(t.cnt), '총 호출')
+      + adminStatCard(adminNumFmt(t.input), '입력 토큰')
+      + adminStatCard(adminNumFmt(t.output), '출력 토큰')
+      + adminStatCard(adminNumFmt(t.total), '총 토큰');
   }
 
   var actionBody = document.getElementById('admin-token-by-action-body');
@@ -156,8 +161,8 @@ function adminRenderTokenStats() {
       ? byAction.map(function(s) {
           return '<tr class="admin-token-row" onclick="adminShowTokenDetail(\'action\',\'' + adminEsc(s.action_key) + '\')">'
             + '<td style="padding:8px;">' + adminEsc(s.label) + '</td>'
-            + '<td style="padding:8px;">' + adminEsc(s.cnt) + '</td>'
-            + '<td style="padding:8px;">' + adminEsc(s.total) + '</td>'
+            + '<td style="padding:8px;">' + adminNumFmt(s.cnt) + '</td>'
+            + '<td style="padding:8px;">' + adminNumFmt(s.total) + '</td>'
           + '</tr>';
         }).join('')
       : '<tr><td colspan="3" style="padding:8px;color:var(--mut);">내역 없음</td></tr>';
@@ -170,11 +175,28 @@ function adminRenderTokenStats() {
       ? byUser.map(function(s) {
           return '<tr class="admin-token-row" onclick="adminShowTokenDetail(\'user\',\'' + adminEsc(s.user_id) + '\')">'
             + '<td style="padding:8px;">' + adminEsc(s.user_id || '(알 수 없음)') + '</td>'
-            + '<td style="padding:8px;">' + adminEsc(s.cnt) + '</td>'
-            + '<td style="padding:8px;">' + adminEsc(s.total) + '</td>'
+            + '<td style="padding:8px;">' + adminNumFmt(s.cnt) + '</td>'
+            + '<td style="padding:8px;">' + adminNumFmt(s.total) + '</td>'
           + '</tr>';
         }).join('')
       : '<tr><td colspan="3" style="padding:8px;color:var(--mut);">내역 없음</td></tr>';
+  }
+
+  var providerBody = document.getElementById('admin-token-by-provider-body');
+  if (providerBody) {
+    var byProvider = adminState.tokenStats.byProvider || [];
+    providerBody.innerHTML = byProvider.length
+      ? byProvider.map(function(s) {
+          var name = (s.provider || '(알 수 없음)') + (s.model ? ' · ' + s.model : '');
+          return '<tr class="admin-token-row" onclick="adminShowTokenDetail(\'provider\',\'' + adminEsc(s.provider) + '\')">'
+            + '<td style="padding:8px;">' + adminEsc(name) + '</td>'
+            + '<td style="padding:8px;">' + adminNumFmt(s.cnt) + '</td>'
+            + '<td style="padding:8px;">' + adminNumFmt(s.input) + '</td>'
+            + '<td style="padding:8px;">' + adminNumFmt(s.output) + '</td>'
+            + '<td style="padding:8px;">' + adminNumFmt(s.total) + '</td>'
+          + '</tr>';
+        }).join('')
+      : '<tr><td colspan="5" style="padding:8px;color:var(--mut);">내역 없음</td></tr>';
   }
 }
 
@@ -182,13 +204,19 @@ async function adminShowTokenDetail(kind, key) {
   var titleEl = document.getElementById('admin-token-detail-title');
   var bodyEl = document.getElementById('admin-token-detail-body');
   var overlay = document.getElementById('admin-token-detail-modal');
-  if (titleEl) titleEl.textContent = kind === 'action' ? '기능별 상세' : (key || '(알 수 없음)') + ' 상세';
+  var titleMap = { action: '기능별 상세', user: (key || '(알 수 없음)') + ' 상세', provider: (key || '(알 수 없음)') + ' 상세' };
+  if (titleEl) titleEl.textContent = titleMap[kind] || '상세';
   if (bodyEl) bodyEl.innerHTML = '<p style="font-size:13px;color:var(--mut);">불러오는 중...</p>';
   if (overlay) overlay.style.display = 'flex';
 
   try {
     var range = adminTokenPeriodRange(adminState.tokenPeriod);
-    var rows = await adminTokenLogDetail(range.from, range.to, kind === 'action' ? key : '', kind === 'user' ? key : '');
+    var rows = await adminTokenLogDetail(
+      range.from, range.to,
+      kind === 'action' ? key : '',
+      kind === 'user' ? key : '',
+      kind === 'provider' ? key : ''
+    );
     if (!bodyEl) return;
     bodyEl.innerHTML = rows.length
       ? '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;"><thead><tr style="border-bottom:1px solid var(--bdr);color:var(--mut);text-align:left;">'
@@ -200,9 +228,9 @@ async function adminShowTokenDetail(kind, key) {
               + '<td style="padding:6px;">' + adminEsc(r.user_id) + '</td>'
               + '<td style="padding:6px;">' + adminEsc(r.label) + '</td>'
               + '<td style="padding:6px;">' + adminEsc(r.model) + '</td>'
-              + '<td style="padding:6px;">' + adminEsc(r.input_tokens) + '</td>'
-              + '<td style="padding:6px;">' + adminEsc(r.output_tokens) + '</td>'
-              + '<td style="padding:6px;">' + adminEsc(r.total_tokens) + '</td>'
+              + '<td style="padding:6px;">' + adminNumFmt(r.input_tokens) + '</td>'
+              + '<td style="padding:6px;">' + adminNumFmt(r.output_tokens) + '</td>'
+              + '<td style="padding:6px;">' + adminNumFmt(r.total_tokens) + '</td>'
             + '</tr>';
           }).join('')
         + '</tbody></table></div>'

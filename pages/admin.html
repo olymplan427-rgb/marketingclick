@@ -52,7 +52,7 @@
             </div>
           </div>
           <div class="admin-stat-grid" id="admin-stat-tokens" style="margin-bottom:16px;"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:16px;">
             <div>
               <div style="font-size:12px;font-weight:700;color:var(--mut);margin-bottom:6px;">기능별 (클릭 시 상세)</div>
               <div style="overflow-x:auto;">
@@ -76,6 +76,19 @@
                     </tr>
                   </thead>
                   <tbody id="admin-token-by-user-body"></tbody>
+                </table>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--mut);margin-bottom:6px;">AI별 (클릭 시 상세)</div>
+              <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                  <thead>
+                    <tr style="border-bottom:1px solid var(--bdr);color:var(--mut);text-align:left;">
+                      <th style="padding:8px;">AI · 모델</th><th style="padding:8px;width:50px;">호출</th><th style="padding:8px;width:70px;">입력</th><th style="padding:8px;width:70px;">출력</th><th style="padding:8px;width:80px;">합계</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admin-token-by-provider-body"></tbody>
                 </table>
               </div>
             </div>
