@@ -154,7 +154,7 @@ async function reportGenerate(btn) {
       var parsedChunk = null;
       for (var attempt = 0; attempt < 2 && !parsedChunk; attempt++) {
         try {
-          var rawChunk = await geminiProxyCall({ model: getModel('gemini'), system: mapSystem, content: JSON.stringify(chunks[i]), max_tokens: 3000 });
+          var rawChunk = await geminiProxyCall({ model: getModel('gemini'), system: mapSystem, content: JSON.stringify(chunks[i]), max_tokens: 3000 }, 'report_generate');
           parsedChunk = reportParseJsonSafe(rawChunk);
         } catch (chunkErr) {
           console.warn('리포트 묶음 ' + (i + 1) + ' 분석 실패(시도 ' + (attempt + 1) + '):', chunkErr.message);
@@ -175,7 +175,7 @@ async function reportGenerate(btn) {
     var parsed = null, reduceErr = null;
     for (var rAttempt = 0; rAttempt < 2 && !parsed; rAttempt++) {
       try {
-        var rawFinal = await geminiProxyCall({ model: getModel('gemini'), system: reduceSystem, content: JSON.stringify(reduceInput), max_tokens: 8000 });
+        var rawFinal = await geminiProxyCall({ model: getModel('gemini'), system: reduceSystem, content: JSON.stringify(reduceInput), max_tokens: 8000 }, 'report_generate');
         parsed = reportParseJsonSafe(rawFinal);
         if (!parsed) reduceErr = '최종 정리 응답 JSON 파싱 실패 — 콘솔(F12)에서 원본 응답 확인. 앞부분: ' + String(rawFinal).slice(0, 200);
       } catch (e) { reduceErr = e.message; }

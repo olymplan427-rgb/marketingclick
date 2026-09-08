@@ -1,7 +1,7 @@
 // 관리자 페이지 — AI 프로바이더 키/모델, 기능별 크레딧 비용, 사용자 관리(D1 직접 반영).
 // 서버(blog-tracker Worker)가 role==='관리자' 아니면 모든 admin* 액션을 거부하므로,
 // 여기서는 sidebar 노출 + 편의 UI만 담당(applyAdminVisibility는 js/common.js).
-var adminState = { config: null, users: [], notices: [], posts: [], selectedPostId: null, validationSummary: [], validationNote: '', promptVersionFilter: '', promptVersions: [], creditStats: [], feedbackThreads: [] };
+var adminState = { config: null, users: [], notices: [], posts: [], selectedPostId: null, validationSummary: [], validationNote: '', promptVersionFilter: '', promptVersions: [], creditStats: [], feedbackThreads: [], tokenPeriod: 'today', tokenStats: { byAction: [], byUser: [], totals: { cnt: 0, input: 0, output: 0, total: 0 } } };
 
 function adminEsc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -39,6 +39,7 @@ async function adminInit() {
     adminRenderValidationSummary();
     adminRenderPromptVersions();
     adminRenderStats();
+    adminLoadTokenStats();
     var dateEl = document.getElementById('admin-notice-date');
     if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
   } catch (e) {
@@ -105,6 +106,115 @@ function adminRenderStats() {
     fbEl.innerHTML = adminStatCard(threads.length, '전체 문의')
       + adminStatCard(waiting, '답변 대기');
   }
+}
+
+// ── 토큰 사용량 (기간 필터 + 기능별/사용자별 집계 + 드릴다운) ─────────
+// 날짜는 클라이언트 로컬 시각 기준(관리자 화면 표시용이라 KST 엄밀함까지는 불필요) — 서버가
+// created_at 'YYYY-MM-DD' 접두 문자열 비교로 필터링(index.js의 adminTokenStats 참고).
+function adminTokenPeriodRange(period) {
+  var now = new Date();
+  var fmt = function(d) { return d.toISOString().slice(0, 10); };
+  if (period === 'today') { var t = fmt(now); return { from: t, to: t }; }
+  if (period === '7d') { var from7 = new Date(now); from7.setDate(from7.getDate() - 6); return { from: fmt(from7), to: fmt(now) }; }
+  if (period === 'month') { var fromM = new Date(now.getFullYear(), now.getMonth(), 1); return { from: fmt(fromM), to: fmt(now) }; }
+  return { from: '', to: '' }; // 전체
+}
+
+function adminSetTokenPeriod(period) {
+  adminState.tokenPeriod = period;
+  ['today', '7d', 'month', 'all'].forEach(function(p) {
+    var btn = document.getElementById('admin-token-period-' + p);
+    if (btn) btn.classList.toggle('active', p === period);
+  });
+  adminLoadTokenStats();
+}
+
+async function adminLoadTokenStats() {
+  try {
+    var range = adminTokenPeriodRange(adminState.tokenPeriod);
+    adminState.tokenStats = await adminTokenStats(range.from, range.to);
+    adminRenderTokenStats();
+  } catch (e) {
+    adminShowError(e.message || '토큰 사용량을 불러오지 못했습니다.');
+  }
+}
+
+function adminRenderTokenStats() {
+  var t = adminState.tokenStats.totals || {};
+  var summaryEl = document.getElementById('admin-stat-tokens');
+  if (summaryEl) {
+    summaryEl.innerHTML = adminStatCard(t.cnt || 0, '총 호출')
+      + adminStatCard(t.input || 0, '입력 토큰')
+      + adminStatCard(t.output || 0, '출력 토큰')
+      + adminStatCard(t.total || 0, '총 토큰');
+  }
+
+  var actionBody = document.getElementById('admin-token-by-action-body');
+  if (actionBody) {
+    var byAction = adminState.tokenStats.byAction || [];
+    actionBody.innerHTML = byAction.length
+      ? byAction.map(function(s) {
+          return '<tr class="admin-token-row" onclick="adminShowTokenDetail(\'action\',\'' + adminEsc(s.action_key) + '\')">'
+            + '<td style="padding:8px;">' + adminEsc(s.label) + '</td>'
+            + '<td style="padding:8px;">' + adminEsc(s.cnt) + '</td>'
+            + '<td style="padding:8px;">' + adminEsc(s.total) + '</td>'
+          + '</tr>';
+        }).join('')
+      : '<tr><td colspan="3" style="padding:8px;color:var(--mut);">내역 없음</td></tr>';
+  }
+
+  var userBody = document.getElementById('admin-token-by-user-body');
+  if (userBody) {
+    var byUser = adminState.tokenStats.byUser || [];
+    userBody.innerHTML = byUser.length
+      ? byUser.map(function(s) {
+          return '<tr class="admin-token-row" onclick="adminShowTokenDetail(\'user\',\'' + adminEsc(s.user_id) + '\')">'
+            + '<td style="padding:8px;">' + adminEsc(s.user_id || '(알 수 없음)') + '</td>'
+            + '<td style="padding:8px;">' + adminEsc(s.cnt) + '</td>'
+            + '<td style="padding:8px;">' + adminEsc(s.total) + '</td>'
+          + '</tr>';
+        }).join('')
+      : '<tr><td colspan="3" style="padding:8px;color:var(--mut);">내역 없음</td></tr>';
+  }
+}
+
+async function adminShowTokenDetail(kind, key) {
+  var titleEl = document.getElementById('admin-token-detail-title');
+  var bodyEl = document.getElementById('admin-token-detail-body');
+  var overlay = document.getElementById('admin-token-detail-modal');
+  if (titleEl) titleEl.textContent = kind === 'action' ? '기능별 상세' : (key || '(알 수 없음)') + ' 상세';
+  if (bodyEl) bodyEl.innerHTML = '<p style="font-size:13px;color:var(--mut);">불러오는 중...</p>';
+  if (overlay) overlay.style.display = 'flex';
+
+  try {
+    var range = adminTokenPeriodRange(adminState.tokenPeriod);
+    var rows = await adminTokenLogDetail(range.from, range.to, kind === 'action' ? key : '', kind === 'user' ? key : '');
+    if (!bodyEl) return;
+    bodyEl.innerHTML = rows.length
+      ? '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;"><thead><tr style="border-bottom:1px solid var(--bdr);color:var(--mut);text-align:left;">'
+        + '<th style="padding:6px;">시각</th><th style="padding:6px;">아이디</th><th style="padding:6px;">기능</th><th style="padding:6px;">모델</th><th style="padding:6px;">입력</th><th style="padding:6px;">출력</th><th style="padding:6px;">합계</th>'
+        + '</tr></thead><tbody>'
+        + rows.map(function(r) {
+            return '<tr style="border-bottom:1px solid var(--bdr);">'
+              + '<td style="padding:6px;white-space:nowrap;">' + adminEsc(r.created_at) + '</td>'
+              + '<td style="padding:6px;">' + adminEsc(r.user_id) + '</td>'
+              + '<td style="padding:6px;">' + adminEsc(r.label) + '</td>'
+              + '<td style="padding:6px;">' + adminEsc(r.model) + '</td>'
+              + '<td style="padding:6px;">' + adminEsc(r.input_tokens) + '</td>'
+              + '<td style="padding:6px;">' + adminEsc(r.output_tokens) + '</td>'
+              + '<td style="padding:6px;">' + adminEsc(r.total_tokens) + '</td>'
+            + '</tr>';
+          }).join('')
+        + '</tbody></table></div>'
+      : '<p style="font-size:13px;color:var(--mut);">해당 기간에 호출 내역이 없습니다.</p>';
+  } catch (e) {
+    if (bodyEl) bodyEl.innerHTML = '<p style="font-size:13px;color:#ef4444;">' + adminEsc(e.message || '상세 조회 실패') + '</p>';
+  }
+}
+
+function adminCloseTokenDetailModal() {
+  var overlay = document.getElementById('admin-token-detail-modal');
+  if (overlay) overlay.style.display = 'none';
 }
 
 // ── 공지사항 ────────────────────────────────────────────────────

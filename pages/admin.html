@@ -42,6 +42,47 @@
         </div>
 
         <div class="tool-section">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+            <div class="sec-title" style="margin:0;">토큰 사용량</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button type="button" class="admin-period-pill active" id="admin-token-period-today" onclick="adminSetTokenPeriod('today')">오늘</button>
+              <button type="button" class="admin-period-pill" id="admin-token-period-7d" onclick="adminSetTokenPeriod('7d')">최근 7일</button>
+              <button type="button" class="admin-period-pill" id="admin-token-period-month" onclick="adminSetTokenPeriod('month')">이번달</button>
+              <button type="button" class="admin-period-pill" id="admin-token-period-all" onclick="adminSetTokenPeriod('all')">전체</button>
+            </div>
+          </div>
+          <div class="admin-stat-grid" id="admin-stat-tokens" style="margin-bottom:16px;"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--mut);margin-bottom:6px;">기능별 (클릭 시 상세)</div>
+              <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                  <thead>
+                    <tr style="border-bottom:1px solid var(--bdr);color:var(--mut);text-align:left;">
+                      <th style="padding:8px;">기능</th><th style="padding:8px;width:60px;">호출</th><th style="padding:8px;width:90px;">토큰</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admin-token-by-action-body"></tbody>
+                </table>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--mut);margin-bottom:6px;">사용자별 (클릭 시 상세)</div>
+              <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                  <thead>
+                    <tr style="border-bottom:1px solid var(--bdr);color:var(--mut);text-align:left;">
+                      <th style="padding:8px;">아이디</th><th style="padding:8px;width:60px;">호출</th><th style="padding:8px;width:90px;">토큰</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admin-token-by-user-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tool-section">
           <div class="sec-title">블로그 작성 현황 <span style="font-weight:400;color:var(--mut);">(최근 200건 기준)</span></div>
           <div class="admin-stat-grid" id="admin-stat-posts"></div>
         </div>
@@ -187,6 +228,17 @@
           <button class="ms-modal-close" onclick="adminCloseModal()">✕</button>
         </div>
         <div class="ms-modal-body" id="admin-post-modal-body"></div>
+      </div>
+    </div>
+
+    <!-- 토큰 사용량 상세(드릴다운) 팝업 -->
+    <div class="ms-modal-overlay" id="admin-token-detail-modal" style="display:none;" onclick="if(event.target===this) adminCloseTokenDetailModal()">
+      <div class="ms-modal-box" style="max-width:780px;">
+        <div class="ms-modal-header">
+          <div class="ms-modal-title" id="admin-token-detail-title"></div>
+          <button class="ms-modal-close" onclick="adminCloseTokenDetailModal()">✕</button>
+        </div>
+        <div class="ms-modal-body" id="admin-token-detail-body"></div>
       </div>
     </div>
   </div><!-- /page-admin -->

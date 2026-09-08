@@ -48,7 +48,8 @@ async function callClaude(apiKey, model, system, messages, maxTokens) {
   if (res.status !== 200) return { ok: false, error: (json.error && json.error.message) || ('Claude API 오류 ' + res.status) };
   const textBlock = (json.content || []).find((b) => b && b.text);
   if (!textBlock) return { ok: false, error: 'Claude 빈 응답(텍스트 블록 없음) — max_tokens을 늘려보세요.' };
-  return { ok: true, data: { content: [textBlock] } };
+  const usage = json.usage ? { input: json.usage.input_tokens || 0, output: json.usage.output_tokens || 0 } : null;
+  return { ok: true, data: { content: [textBlock] }, usage, model };
 }
 
 async function callGeminiOnce(apiKey, model, system, messages, maxTokens, timeoutMs) {
@@ -74,7 +75,9 @@ async function callGeminiOnce(apiKey, model, system, messages, maxTokens, timeou
   const text = json.candidates && json.candidates[0] && json.candidates[0].content &&
     json.candidates[0].content.parts && json.candidates[0].content.parts[0] && json.candidates[0].content.parts[0].text;
   if (!text) return { ok: false, error: 'Gemini 빈 응답(안전 필터에 걸렸을 수 있습니다)' };
-  return { ok: true, text };
+  const um = json.usageMetadata || {};
+  const usage = { input: um.promptTokenCount || 0, output: um.candidatesTokenCount || 0 };
+  return { ok: true, text, usage };
 }
 
 // 429/오류/빈응답이면 다음 (모델,키) 조합으로 순서대로 폴백 — 기존 GAS _callGeminiGeneral/_geminiProxy와
@@ -104,7 +107,7 @@ async function callGemini(apiKeys, models, system, messages, maxTokens) {
       if (remaining < GEMINI_MIN_ATTEMPT_MS) return { ok: false, error: lastErr || 'Gemini 모든 조합 실패' };
       const timeout = Math.min(remaining, GEMINI_PER_ATTEMPT_TIMEOUT_MS);
       const r = await callGeminiOnce(apiKey, model, system, messages, maxTokens, timeout);
-      if (r.ok) return { ok: true, data: { content: [{ text: r.text }] }, text: r.text, model };
+      if (r.ok) return { ok: true, data: { content: [{ text: r.text }] }, text: r.text, model, usage: r.usage };
       lastErr = r.error;
     }
   }
@@ -124,7 +127,8 @@ async function callOpenAi(apiKey, model, system, messages, maxTokens) {
   if (res.status !== 200) return { ok: false, error: (json.error && json.error.message) || ('OpenAI API 오류 ' + res.status) };
   const text = json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
   if (!text) return { ok: false, error: 'OpenAI 빈 응답' };
-  return { ok: true, data: { content: [{ text }] } };
+  const usage = json.usage ? { input: json.usage.prompt_tokens || 0, output: json.usage.completion_tokens || 0 } : null;
+  return { ok: true, data: { content: [{ text }] }, usage, model };
 }
 
 export default async function handler(req, res) {

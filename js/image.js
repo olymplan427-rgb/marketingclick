@@ -1805,7 +1805,7 @@ async function callClaudePromo(imageDataUrl, prompt) {
         { type: 'image', source: { type: 'base64', media_type: mimeType, data: b64 } },
         { type: 'text', text: prompt }
       ]}]
-    });
+    }, 'image_promo');
     var text = data.content && data.content[0] && data.content[0].text;
     if (text && text.trim()) return { ok: true, text: text, model: getModel('claude') };
     return { ok: false, error: '빈 응답' };
