@@ -1,7 +1,7 @@
 // 관리자 페이지 — AI 프로바이더 키/모델, 기능별 크레딧 비용, 사용자 관리(D1 직접 반영).
 // 서버(blog-tracker Worker)가 role==='관리자' 아니면 모든 admin* 액션을 거부하므로,
 // 여기서는 sidebar 노출 + 편의 UI만 담당(applyAdminVisibility는 js/common.js).
-var adminState = { config: null, users: [], notices: [], posts: [], selectedPostId: null, validationSummary: [], validationNote: '', promptVersionFilter: '', promptVersions: [], creditStats: [], feedbackThreads: [], tokenPeriod: 'today', tokenStats: { byAction: [], byUser: [], totals: { cnt: 0, input: 0, output: 0, total: 0 } } };
+var adminState = { config: null, users: [], notices: [], posts: [], selectedPostId: null, validationSummary: [], validationNote: '', promptVersionFilter: '', promptVersions: [], creditStats: [], feedbackThreads: [], tokenPeriod: 'today', tokenStats: { byAction: [], byUser: [], byProvider: [], byDay: [], totals: { cnt: 0, input: 0, output: 0, total: 0 } } };
 
 function adminEsc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -115,18 +115,74 @@ function adminTokenPeriodRange(period) {
   var now = new Date();
   var fmt = function(d) { return d.toISOString().slice(0, 10); };
   if (period === 'today') { var t = fmt(now); return { from: t, to: t }; }
+  if (period === 'yesterday') { var y = new Date(now); y.setDate(y.getDate() - 1); var yt = fmt(y); return { from: yt, to: yt }; }
   if (period === '7d') { var from7 = new Date(now); from7.setDate(from7.getDate() - 6); return { from: fmt(from7), to: fmt(now) }; }
   if (period === 'month') { var fromM = new Date(now.getFullYear(), now.getMonth(), 1); return { from: fmt(fromM), to: fmt(now) }; }
+  if (period === 'custom') {
+    var fromEl = document.getElementById('admin-token-custom-from');
+    var toEl = document.getElementById('admin-token-custom-to');
+    return { from: (fromEl && fromEl.value) || '', to: (toEl && toEl.value) || '' };
+  }
   return { from: '', to: '' }; // 전체
 }
 
 function adminSetTokenPeriod(period) {
   adminState.tokenPeriod = period;
-  ['today', '7d', 'month', 'all'].forEach(function(p) {
+  ['today', 'yesterday', '7d', 'month', 'all'].forEach(function(p) {
     var btn = document.getElementById('admin-token-period-' + p);
     if (btn) btn.classList.toggle('active', p === period);
   });
   adminLoadTokenStats();
+}
+
+// 날짜 직접 지정 — 프리셋 필(오늘/어제/최근7일/이번달/전체)에 없는 특정일/기간 조회용
+// (2026-09-08 피드백: "날짜를 지정해서 볼 수 있는게 있어야 할 듯").
+function adminSetTokenCustomRange() {
+  var fromEl = document.getElementById('admin-token-custom-from');
+  var toEl = document.getElementById('admin-token-custom-to');
+  if (!fromEl || !toEl || !fromEl.value) return;
+  if (!toEl.value) toEl.value = fromEl.value;
+  adminState.tokenPeriod = 'custom';
+  ['today', 'yesterday', '7d', 'month', 'all'].forEach(function(p) {
+    var btn = document.getElementById('admin-token-period-' + p);
+    if (btn) btn.classList.remove('active');
+  });
+  adminLoadTokenStats();
+}
+
+// ── 예상 비용 환산 (참고용 추정치) ──────────────────────────────────
+// 실제 청구 금액이 아니라 "이 정도 토큰량이면 유료 API 기준 대략 얼마 정도인가"를 가늠하기 위한
+// 참고 수치다(2026-09-08 피드백: "금액으로 환산할수가 있나?"). Gemini는 현재 무료 티어 키를 순환
+// 사용 중이라 실제 청구는 0원이지만, 사용량 감(sense)을 잡을 수 있도록 유료 기준가로도 계산해 보여줌.
+// 가격은 1M(백만) 토큰당 USD, 모델명에 포함된 키워드로 매칭 — 정확한 청구서가 아니므로 근사치.
+var ADMIN_TOKEN_PRICING_USD_PER_M = [
+  { match: /opus/i, input: 15, output: 75 },
+  { match: /sonnet/i, input: 3, output: 15 },
+  { match: /haiku/i, input: 0.8, output: 4 },
+  { match: /flash/i, input: 0.075, output: 0.3 },
+  { match: /gemini.*pro|pro.*gemini/i, input: 1.25, output: 5 },
+  { match: /gpt-4o-mini/i, input: 0.15, output: 0.6 },
+  { match: /gpt-4o|gpt-4/i, input: 2.5, output: 10 }
+];
+var ADMIN_USD_TO_KRW = 1450; // 대략적인 환율 — 참고용 추정치라 엄밀하지 않음
+
+function adminPriceForModel(model) {
+  for (var i = 0; i < ADMIN_TOKEN_PRICING_USD_PER_M.length; i++) {
+    if (ADMIN_TOKEN_PRICING_USD_PER_M[i].match.test(model || '')) return ADMIN_TOKEN_PRICING_USD_PER_M[i];
+  }
+  return null;
+}
+
+function adminEstimateCostUsd(byProvider) {
+  var total = 0;
+  var matched = false;
+  (byProvider || []).forEach(function(s) {
+    var price = adminPriceForModel(s.model);
+    if (!price) return;
+    matched = true;
+    total += ((s.input || 0) / 1e6) * price.input + ((s.output || 0) / 1e6) * price.output;
+  });
+  return matched ? total : null;
 }
 
 async function adminLoadTokenStats() {
@@ -146,13 +202,24 @@ function adminNumFmt(n) {
 
 function adminRenderTokenStats() {
   var t = adminState.tokenStats.totals || {};
+  var byProvider = adminState.tokenStats.byProvider || [];
+  var costUsd = adminEstimateCostUsd(byProvider);
+  var costLabel = costUsd === null ? '—' : '$' + costUsd.toFixed(2);
   var summaryEl = document.getElementById('admin-stat-tokens');
   if (summaryEl) {
     summaryEl.innerHTML = adminStatCard(adminNumFmt(t.cnt), '총 호출')
       + adminStatCard(adminNumFmt(t.input), '입력 토큰')
       + adminStatCard(adminNumFmt(t.output), '출력 토큰')
-      + adminStatCard(adminNumFmt(t.total), '총 토큰');
+      + adminStatCard(adminNumFmt(t.total), '총 토큰')
+      + adminStatCard(costLabel, '예상 비용(유료 환산)');
   }
+  var noteEl = document.getElementById('admin-token-cost-note');
+  if (noteEl) {
+    noteEl.textContent = costUsd === null
+      ? '예상 비용은 알려진 모델 단가와 매칭되는 경우에만 계산됩니다.'
+      : '예상 비용은 각 모델의 유료 API 단가 기준 추정치입니다(약 ' + adminNumFmt(Math.round(costUsd * ADMIN_USD_TO_KRW)) + '원, 환율 1450원/$ 기준). 현재 Gemini는 무료 티어 키를 사용 중이라 실제 청구액은 이보다 적거나 0원일 수 있습니다.';
+  }
+  adminRenderTokenDailyChart();
 
   var actionBody = document.getElementById('admin-token-by-action-body');
   if (actionBody) {
@@ -197,6 +264,34 @@ function adminRenderTokenStats() {
           + '</tr>';
         }).join('')
       : '<tr><td colspan="5" style="padding:8px;color:var(--mut);">내역 없음</td></tr>';
+  }
+}
+
+// 일별 추이 그래프 — 외부 차트 라이브러리 없이 막대 높이를 순수 CSS/JS로 계산해서 그림
+// (2026-09-08 피드백: "기본으로 보이는 것은 매일 그래프형태로 할까?" → 기본 뷰에 항상 표시).
+function adminRenderTokenDailyChart() {
+  var chartEl = document.getElementById('admin-token-daily-chart');
+  var labelsEl = document.getElementById('admin-token-daily-labels');
+  if (!chartEl) return;
+  var byDay = adminState.tokenStats.byDay || [];
+  if (!byDay.length) {
+    chartEl.innerHTML = '<div style="width:100%;text-align:center;color:var(--mut);font-size:12px;align-self:center;">내역 없음</div>';
+    if (labelsEl) labelsEl.innerHTML = '';
+    return;
+  }
+  var max = Math.max.apply(null, byDay.map(function(d) { return d.total || 0; })) || 1;
+  chartEl.innerHTML = byDay.map(function(d) {
+    var h = Math.max(2, Math.round(((d.total || 0) / max) * 116));
+    var title = d.day + ' · 호출 ' + adminNumFmt(d.cnt) + '회 · 토큰 ' + adminNumFmt(d.total);
+    return '<div class="admin-token-bar" style="height:' + h + 'px;" title="' + adminEsc(title) + '"></div>';
+  }).join('');
+  // 막대 수가 많아지면(전체 기간 등) 라벨을 다 못 넣으니 대략 8~10개만 간격을 두고 표시
+  var showEvery = Math.max(1, Math.ceil(byDay.length / 8));
+  if (labelsEl) {
+    labelsEl.innerHTML = byDay.map(function(d, i) {
+      var text = (i % showEvery === 0 || i === byDay.length - 1) ? d.day.slice(5) : '';
+      return '<div style="flex:1;min-width:4px;text-align:center;white-space:nowrap;overflow:hidden;">' + adminEsc(text) + '</div>';
+    }).join('');
   }
 }
 

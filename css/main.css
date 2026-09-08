@@ -361,6 +361,9 @@ canvas{display:block;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.15);cu
 .admin-period-pill.active{background:var(--acc);color:#fff;border-color:var(--acc);}
 .admin-token-row{cursor:pointer;transition:background .1s;}
 .admin-token-row:hover{background:var(--hover);}
+.admin-date-input{font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid var(--bdr);color:var(--txt);background:#fff;}
+.admin-token-bar{flex:1;min-width:4px;background:var(--acc-light);border:1px solid var(--acc-border);border-radius:3px 3px 0 0;cursor:default;transition:background .12s;}
+.admin-token-bar:hover{background:var(--acc);border-color:var(--acc);}
 
 /* ── 설정 페이지 ── */
 #page-settings{flex:1;overflow-y:auto;}

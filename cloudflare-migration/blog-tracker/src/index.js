@@ -546,6 +546,10 @@ async function adminTokenStats(env, from, to) {
   const byProvider = await env.DB.prepare(
     'SELECT provider, model, COUNT(*) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ? GROUP BY provider, model ORDER BY total DESC'
   ).bind(fromB, toB).all();
+  // 일별 그래프용 — created_at 앞 10자(YYYY-MM-DD)로 그룹핑(2026-09-08, "기본으로 그래프" 요청).
+  const byDay = await env.DB.prepare(
+    "SELECT substr(created_at,1,10) as day, COUNT(*) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ? GROUP BY day ORDER BY day ASC"
+  ).bind(fromB, toB).all();
   const totals = await env.DB.prepare(
     'SELECT COUNT(*) as cnt, SUM(input_tokens) as input, SUM(output_tokens) as output, SUM(total_tokens) as total FROM token_log WHERE created_at >= ? AND created_at <= ?'
   ).bind(fromB, toB).first();
@@ -554,6 +558,7 @@ async function adminTokenStats(env, from, to) {
     byAction: byAction.results.map((r) => ({ ...r, label: ACTION_LABELS[r.action_key] || r.action_key || '(미지정)' })),
     byUser: byUser.results,
     byProvider: byProvider.results,
+    byDay: byDay.results,
     totals: totals || { cnt: 0, input: 0, output: 0, total: 0 }
   };
 }

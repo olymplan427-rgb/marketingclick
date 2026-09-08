@@ -44,14 +44,25 @@
         <div class="tool-section">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
             <div class="sec-title" style="margin:0;">토큰 사용량</div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
               <button type="button" class="admin-period-pill active" id="admin-token-period-today" onclick="adminSetTokenPeriod('today')">오늘</button>
+              <button type="button" class="admin-period-pill" id="admin-token-period-yesterday" onclick="adminSetTokenPeriod('yesterday')">어제</button>
               <button type="button" class="admin-period-pill" id="admin-token-period-7d" onclick="adminSetTokenPeriod('7d')">최근 7일</button>
               <button type="button" class="admin-period-pill" id="admin-token-period-month" onclick="adminSetTokenPeriod('month')">이번달</button>
               <button type="button" class="admin-period-pill" id="admin-token-period-all" onclick="adminSetTokenPeriod('all')">전체</button>
+              <span style="width:1px;height:18px;background:var(--bdr);margin:0 4px;"></span>
+              <input type="date" id="admin-token-custom-from" class="admin-date-input" onchange="adminSetTokenCustomRange()">
+              <span style="color:var(--mut);font-size:12px;">~</span>
+              <input type="date" id="admin-token-custom-to" class="admin-date-input" onchange="adminSetTokenCustomRange()">
             </div>
           </div>
-          <div class="admin-stat-grid" id="admin-stat-tokens" style="margin-bottom:16px;"></div>
+          <div class="admin-stat-grid" id="admin-stat-tokens" style="margin-bottom:6px;"></div>
+          <div id="admin-token-cost-note" style="font-size:11.5px;color:var(--mut);margin-bottom:16px;"></div>
+          <div style="margin-bottom:20px;">
+            <div style="font-size:12px;font-weight:700;color:var(--mut);margin-bottom:8px;">일별 추이</div>
+            <div id="admin-token-daily-chart" style="display:flex;align-items:flex-end;gap:3px;height:120px;border-bottom:1px solid var(--bdr);padding:0 2px;"></div>
+            <div id="admin-token-daily-labels" style="display:flex;gap:3px;padding:0 2px;margin-top:4px;font-size:10px;color:var(--mut);"></div>
+          </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:16px;">
             <div>
               <div style="font-size:12px;font-weight:700;color:var(--mut);margin-bottom:6px;">기능별 (클릭 시 상세)</div>
