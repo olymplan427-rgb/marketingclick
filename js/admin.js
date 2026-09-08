@@ -42,6 +42,11 @@ async function adminInit() {
     adminLoadTokenStats();
     var dateEl = document.getElementById('admin-notice-date');
     if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+    var now = new Date();
+    var fromEl = document.getElementById('admin-token-custom-from');
+    var toEl = document.getElementById('admin-token-custom-to');
+    if (fromEl && !fromEl.value) fromEl.value = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    if (toEl && !toEl.value) toEl.value = now.toISOString().slice(0, 10);
   } catch (e) {
     adminShowError(e.message || '관리자 정보를 불러오지 못했습니다.');
   }
