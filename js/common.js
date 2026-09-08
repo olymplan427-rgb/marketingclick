@@ -714,10 +714,10 @@ async function adminCreditStats() {
 }
 async function adminTokenStats(from, to) {
   var json = await _adminCall('adminTokenStats', { from: from || '', to: to || '' });
-  return { byAction: json.byAction || [], byUser: json.byUser || [], totals: json.totals || { cnt: 0, input: 0, output: 0, total: 0 } };
+  return { byAction: json.byAction || [], byUser: json.byUser || [], byProvider: json.byProvider || [], totals: json.totals || { cnt: 0, input: 0, output: 0, total: 0 } };
 }
-async function adminTokenLogDetail(from, to, actionKey, filterUserId) {
-  var json = await _adminCall('adminTokenLogDetail', { from: from || '', to: to || '', actionKey: actionKey || '', filterUserId: filterUserId || '' });
+async function adminTokenLogDetail(from, to, actionKey, filterUserId, provider) {
+  var json = await _adminCall('adminTokenLogDetail', { from: from || '', to: to || '', actionKey: actionKey || '', filterUserId: filterUserId || '', provider: provider || '' });
   return json.rows || [];
 }
 
