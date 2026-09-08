@@ -706,6 +706,10 @@ async function adminSetModels(provider, models) {
 async function adminSetCreditCost(actionKey, cost) {
   return _adminCall('adminSetCreditCost', { actionKey: actionKey, cost: cost });
 }
+async function adminCreditStats() {
+  var json = await _adminCall('adminCreditStats');
+  return json.stats || [];
+}
 
 // ── 공지사항 (홈 페이지) ────────────────────────────────────────
 async function getAnnouncements() {

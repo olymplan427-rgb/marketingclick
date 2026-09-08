@@ -1,7 +1,7 @@
 // 관리자 페이지 — AI 프로바이더 키/모델, 기능별 크레딧 비용, 사용자 관리(D1 직접 반영).
 // 서버(blog-tracker Worker)가 role==='관리자' 아니면 모든 admin* 액션을 거부하므로,
 // 여기서는 sidebar 노출 + 편의 UI만 담당(applyAdminVisibility는 js/common.js).
-var adminState = { config: null, users: [], notices: [], posts: [], selectedPostId: null, validationSummary: [], validationNote: '', promptVersionFilter: '', promptVersions: [] };
+var adminState = { config: null, users: [], notices: [], posts: [], selectedPostId: null, validationSummary: [], validationNote: '', promptVersionFilter: '', promptVersions: [], creditStats: [], feedbackThreads: [] };
 
 function adminEsc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -18,7 +18,10 @@ function adminShowError(msg) {
 async function adminInit() {
   adminShowError('');
   try {
-    var [config, users, notices, postsResult, promptVersions] = await Promise.all([adminGetConfig(), adminListUsers(), getAnnouncements(), adminListPosts(), adminListPromptVersions()]);
+    var [config, users, notices, postsResult, promptVersions, creditStats, feedbackThreads] = await Promise.all([
+      adminGetConfig(), adminListUsers(), getAnnouncements(), adminListPosts(), adminListPromptVersions(),
+      adminCreditStats(), gasFeedbackList()
+    ]);
     adminState.config = config;
     adminState.users = users;
     adminState.notices = notices;
@@ -26,6 +29,8 @@ async function adminInit() {
     adminState.validationSummary = postsResult.validationSummary;
     adminState.validationNote = postsResult.validationNote;
     adminState.promptVersions = promptVersions;
+    adminState.creditStats = creditStats;
+    adminState.feedbackThreads = feedbackThreads;
     adminRenderAiList();
     adminRenderCreditCosts();
     adminRenderUsers();
@@ -33,10 +38,72 @@ async function adminInit() {
     adminRenderPosts();
     adminRenderValidationSummary();
     adminRenderPromptVersions();
+    adminRenderStats();
     var dateEl = document.getElementById('admin-notice-date');
     if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
   } catch (e) {
     adminShowError(e.message || '관리자 정보를 불러오지 못했습니다.');
+  }
+}
+
+// ── 탭 전환 ───────────────────────────────────────────────────────
+function adminShowTab(tab) {
+  ['stats', 'users', 'content', 'ai'].forEach(function(t) {
+    var panel = document.getElementById('admin-tab-panel-' + t);
+    if (panel) panel.style.display = (t === tab) ? '' : 'none';
+    var btn = document.getElementById('admin-tab-btn-' + t);
+    if (btn) btn.classList.toggle('active', t === tab);
+  });
+}
+
+// ── 통계 ─────────────────────────────────────────────────────────
+function adminStatCard(num, label) {
+  return '<div class="admin-stat-card"><div class="admin-stat-num">' + adminEsc(num) + '</div><div class="admin-stat-label">' + adminEsc(label) + '</div></div>';
+}
+
+function adminRenderStats() {
+  var users = adminState.users || [];
+  var usersEl = document.getElementById('admin-stat-users');
+  if (usersEl) {
+    var active = users.filter(function(u) { return u.status === '사용'; }).length;
+    var pending = users.filter(function(u) { return u.status === '대기'; }).length;
+    var admins = users.filter(function(u) { return u.role === '관리자'; }).length;
+    usersEl.innerHTML = adminStatCard(users.length, '총 가입자')
+      + adminStatCard(active, '활성 계정')
+      + adminStatCard(pending, '승인 대기')
+      + adminStatCard(admins, '관리자 계정');
+  }
+
+  var creditBody = document.getElementById('admin-credit-stats-body');
+  if (creditBody) {
+    var stats = adminState.creditStats || [];
+    creditBody.innerHTML = stats.length
+      ? stats.map(function(s) {
+          return '<tr style="border-bottom:1px solid var(--bdr);">'
+            + '<td style="padding:10px;">' + adminEsc(s.item) + '</td>'
+            + '<td style="padding:10px;">' + adminEsc(s.cnt) + '회</td>'
+            + '<td style="padding:10px;">' + adminEsc(s.spent) + '크레딧</td>'
+          + '</tr>';
+        }).join('')
+      : '<tr><td colspan="3" style="padding:10px;color:var(--mut);">아직 사용 내역이 없습니다.</td></tr>';
+  }
+
+  var posts = adminState.posts || [];
+  var postsEl = document.getElementById('admin-stat-posts');
+  if (postsEl) {
+    var byType = {};
+    posts.forEach(function(p) { var t = p.type || '기타'; byType[t] = (byType[t] || 0) + 1; });
+    var typeCards = Object.keys(byType).sort(function(a, b) { return byType[b] - byType[a]; })
+      .map(function(t) { return adminStatCard(byType[t], t); }).join('');
+    postsEl.innerHTML = adminStatCard(posts.length, '총 작성 글') + typeCards;
+  }
+
+  var threads = adminState.feedbackThreads || [];
+  var fbEl = document.getElementById('admin-stat-feedback');
+  if (fbEl) {
+    var waiting = threads.filter(function(t) { return t.messages.length <= 1; }).length;
+    fbEl.innerHTML = adminStatCard(threads.length, '전체 문의')
+      + adminStatCard(waiting, '답변 대기');
   }
 }
 

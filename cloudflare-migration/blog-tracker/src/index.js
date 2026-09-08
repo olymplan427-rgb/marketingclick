@@ -2,7 +2,7 @@
 // Sheets API 왕복이 없어지고, Worker 내부에서 로컬 SQLite 쿼리로 끝나 응답 속도가 크게 개선됨.
 // 클라이언트(js/common.js)는 전혀 수정 불필요 — 액션/응답 형태 100% 동일하게 유지.
 import { sendMail } from './mail.js';
-const ADMIN_ACTIONS = ['adminListUsers', 'adminUpdateUser', 'adminApproveUser', 'adminGetConfig', 'adminSetConfigValue', 'adminSetModels', 'adminSetCreditCost', 'adminAddAnnouncement', 'adminUpdateAnnouncement', 'adminDeleteAnnouncement', 'adminListPosts', 'adminDeletePost', 'adminValidatePostAI', 'adminGetPostValidations', 'adminSetValidationDecision', 'adminListPromptVersions', 'adminGetPromptVersionDetail', 'adminActivatePromptVersion', 'adminGenerateAiPromptRevision'];
+const ADMIN_ACTIONS = ['adminListUsers', 'adminUpdateUser', 'adminApproveUser', 'adminGetConfig', 'adminSetConfigValue', 'adminSetModels', 'adminSetCreditCost', 'adminAddAnnouncement', 'adminUpdateAnnouncement', 'adminDeleteAnnouncement', 'adminListPosts', 'adminDeletePost', 'adminValidatePostAI', 'adminGetPostValidations', 'adminSetValidationDecision', 'adminListPromptVersions', 'adminGetPromptVersionDetail', 'adminActivatePromptVersion', 'adminGenerateAiPromptRevision', 'adminCreditStats'];
 // getActiveBlogPrompt: 관리자 전용이 아님 — 블로그를 쓰는 모든 로그인 사용자가 글 작성 시마다 호출.
 const AUTHED_ACTIONS = ['login', 'myPosts', 'claudeProxy', 'geminiProxy', 'feedbackList', 'feedbackPost', 'feedbackReply', 'loadSchoolShare', 'saveSchoolShare', 'schoolShareSearch', 'useCredit', 'creditStatus', 'creditHistory', 'creditQuote', 'getAnnouncements', 'getActiveBlogPrompt', 'myProfile', 'changePassword', ...ADMIN_ACTIONS];
 
@@ -505,6 +505,16 @@ function maskSecret(v) {
 async function adminListUsers(env) {
   const { results } = await env.DB.prepare('SELECT id,name,academy,status,role,monthly_credit,remaining_credit,credit_reset_month FROM users ORDER BY id ASC').all();
   return { ok: true, users: results };
+}
+
+// 관리자 통계 탭 — 기능별 사용량(호출 횟수·소모 크레딧). useCredit()이 매 차감마다
+// type='사용', item=ACTION_LABELS[actionKey]로 남기는 credit_log를 집계만 하면 되므로
+// 새 테이블 없이 바로 가능(2026-09-08).
+async function adminCreditStats(env) {
+  const { results } = await env.DB.prepare(
+    "SELECT item, COUNT(*) as cnt, SUM(-delta) as spent FROM credit_log WHERE type='사용' GROUP BY item ORDER BY spent DESC"
+  ).all();
+  return { ok: true, stats: results };
 }
 
 async function adminUpdateUser(env, id, patch) {
@@ -1188,6 +1198,7 @@ export default {
         if (data.action === 'adminSetConfigValue') return jsonResponse(await adminSetConfigValue(env, data.key || '', data.value, data.model));
         if (data.action === 'adminSetModels') return jsonResponse(await adminSetModels(env, data.provider || '', data.models || []));
         if (data.action === 'adminSetCreditCost') return jsonResponse(await adminSetCreditCost(env, data.actionKey || '', data.cost));
+        if (data.action === 'adminCreditStats') return jsonResponse(await adminCreditStats(env));
         if (data.action === 'myPosts') return jsonResponse({ ok: true, posts: await getMyPosts(env, data.userId, data.n || 100) });
         if (data.action === 'claudeProxy') return aiJsonResponse(await claudeProxy(env, data.payload));
         if (data.action === 'geminiProxy') return aiJsonResponse(await geminiProxy(env, data.payload));
