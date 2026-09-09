@@ -2094,7 +2094,7 @@ async function igCreateContainer(userId, token, imageUrl, caption) {
     caption: caption || '',
     access_token: token
   });
-  var res = await fetch('https://graph.instagram.com/v19.0/' + userId + '/media', {
+  var res = await fetch('https://graph.instagram.com/v23.0/' + userId + '/media', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: params.toString()
@@ -2109,7 +2109,7 @@ async function igPublishContainer(userId, token, creationId) {
     creation_id: creationId,
     access_token: token
   });
-  var res = await fetch('https://graph.instagram.com/v19.0/' + userId + '/media_publish', {
+  var res = await fetch('https://graph.instagram.com/v23.0/' + userId + '/media_publish', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: params.toString()
@@ -2159,7 +2159,7 @@ async function igPostCurrentImage() {
     var ready = false;
     for (var i = 0; i < 10; i++) {
       await new Promise(function(r) { setTimeout(r, 3000); });
-      var statusRes = await fetch('https://graph.instagram.com/v19.0/' + creationId + '?fields=status_code&access_token=' + creds.token);
+      var statusRes = await fetch('https://graph.instagram.com/v23.0/' + creationId + '?fields=status_code&access_token=' + creds.token);
       var statusData = await statusRes.json();
       var statusCode = statusData.status_code;
       if (statusCode === 'FINISHED') { ready = true; break; }
