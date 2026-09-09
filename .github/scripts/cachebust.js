@@ -24,16 +24,24 @@ const localAssets = [
   'js/report.js',
   'js/schoolRegionCodes.js',
   'js/schoolshare.js',
+  'js/credit.js',
   'js/feedback.js',
+  'js/admin.js',
+  'js/home.js',
+  'js/guide.js',
   'js/common.js',
+  'pages/home.html',
   'pages/image.html',
   'pages/blog.html',
   'pages/monitor.html',
   'pages/mapsearch.html',
   'pages/report.html',
   'pages/schoolshare.html',
+  'pages/credit.html',
   'pages/feedback.html',
-  'pages/settings.html'
+  'pages/guide.html',
+  'pages/settings.html',
+  'pages/admin.html'
 ];
 
 localAssets.forEach(function(asset) {
