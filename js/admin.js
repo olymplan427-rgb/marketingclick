@@ -316,7 +316,8 @@ function adminRenderTokenStats() {
     providerBody.innerHTML = byProvider.length
       ? byProvider.map(function(s) {
           var name = (s.provider || '(알 수 없음)') + (s.model ? ' · ' + s.model : '');
-          return '<tr class="admin-token-row" onclick="adminShowTokenDetail(\'provider\',\'' + adminEsc(s.provider) + '\')">'
+          var providerKey = (s.provider || '') + '|' + (s.model || '');
+          return '<tr class="admin-token-row" onclick="adminShowTokenDetail(\'provider\',\'' + adminEsc(providerKey) + '\')">'
             + '<td style="padding:8px;">' + adminEsc(name) + '</td>'
             + '<td style="padding:8px;">' + adminNumFmt(s.cnt) + '</td>'
             + '<td style="padding:8px;">' + adminTokenFmt(s.input) + '</td>'
@@ -372,7 +373,11 @@ async function adminShowTokenDetail(kind, key) {
   var titleEl = document.getElementById('admin-token-detail-title');
   var bodyEl = document.getElementById('admin-token-detail-body');
   var overlay = document.getElementById('admin-token-detail-modal');
-  var titleMap = { action: '기능별 상세', user: (key || '(알 수 없음)') + ' 상세', provider: (key || '(알 수 없음)') + ' 상세' };
+  // provider 종류는 'provider|model' 형태로 넘어옴(같은 provider라도 모델별로 구분해서 조회하기 위함, 2026-09-10)
+  var providerKey = kind === 'provider' ? String(key || '').split('|') : ['', ''];
+  var provider = providerKey[0], model = providerKey[1];
+  var providerLabel = provider + (model ? ' · ' + model : '');
+  var titleMap = { action: '기능별 상세', user: (key || '(알 수 없음)') + ' 상세', provider: (providerLabel || '(알 수 없음)') + ' 상세' };
   if (titleEl) titleEl.textContent = titleMap[kind] || '상세';
   if (bodyEl) bodyEl.innerHTML = '<p style="font-size:13px;color:var(--mut);">불러오는 중...</p>';
   if (overlay) overlay.style.display = 'flex';
@@ -383,7 +388,8 @@ async function adminShowTokenDetail(kind, key) {
       range.from, range.to,
       kind === 'action' ? key : '',
       kind === 'user' ? key : '',
-      kind === 'provider' ? key : ''
+      kind === 'provider' ? provider : '',
+      kind === 'provider' ? model : ''
     );
     if (!bodyEl) return;
     bodyEl.innerHTML = rows.length
