@@ -227,13 +227,13 @@ async function loginSubmit() {
   if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
   if (!id || !pw) { if (errEl) { errEl.textContent = '아이디와 비밀번호를 입력하세요.'; errEl.style.display = 'block'; } return; }
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) { if (errEl) { errEl.textContent = '서버 설정 오류(GAS 미설정)'; errEl.style.display = 'block'; } return; }
+  if (!cfg.url) { if (errEl) { errEl.textContent = '서버 설정 오류(GAS 미설정)'; errEl.style.display = 'block'; } return; }
   if (btn) { btn.disabled = true; btn.textContent = '확인 중...'; }
   try {
     var json = await _fetchGasJson(cfg.url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS는 OPTIONS(preflight)를 못 받으므로 simple-request로 보냄
-      body: JSON.stringify({ action: 'login', token: cfg.token, userId: id, userPw: pw, site: _siteId() })
+      body: JSON.stringify({ action: 'login', userId: id, userPw: pw, site: _siteId() })
     });
     if (!json.ok) { if (errEl) { errEl.textContent = json.error || '로그인 실패'; errEl.style.display = 'block'; } return; }
     localStorage.setItem(_authKey('user_id'), id);
@@ -297,13 +297,13 @@ async function registerSubmit() {
   if (!id || !pw || !pwConfirm || !name || !academy) { if (errEl) { errEl.textContent = '모든 항목을 입력하세요.'; errEl.style.display = 'block'; } return; }
   if (pw !== pwConfirm) { if (errEl) { errEl.textContent = '비밀번호가 일치하지 않습니다.'; errEl.style.display = 'block'; } return; }
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) { if (errEl) { errEl.textContent = '서버 설정 오류(GAS 미설정)'; errEl.style.display = 'block'; } return; }
+  if (!cfg.url) { if (errEl) { errEl.textContent = '서버 설정 오류(GAS 미설정)'; errEl.style.display = 'block'; } return; }
   if (btn) { btn.disabled = true; btn.textContent = '가입 중...'; }
   try {
     var json = await _fetchGasJson(cfg.url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'register', token: cfg.token, userId: id, userPw: pw, name: name, academy: academy, site: _siteId() })
+      body: JSON.stringify({ action: 'register', userId: id, userPw: pw, name: name, academy: academy, site: _siteId() })
     });
     if (!json.ok) { if (errEl) { errEl.textContent = json.error || '가입 실패'; errEl.style.display = 'block'; } return; }
     // 관리자 승인이 필요한 가입(REQUIRE_SIGNUP_APPROVAL=true일 때)만 대기 안내 후 로그인 화면으로.
@@ -427,11 +427,11 @@ async function claudeProxyCall(payload, actionKey, requestId) {
   var auth = getUserAuth();
   if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  if (!cfg.url) throw new Error('서버 설정 오류(GAS 미설정)');
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS는 OPTIONS(preflight)를 못 받으므로 simple-request로 보냄
-    body: JSON.stringify({ action: 'claudeProxy', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), payload: payload, actionKey: actionKey || '', requestId: requestId || '' })
+    body: JSON.stringify({ action: 'claudeProxy', userId: auth.id, userPw: auth.pw, site: _siteId(), payload: payload, actionKey: actionKey || '', requestId: requestId || '' })
   });
   if (!json.ok) throw new Error(json.error || 'Claude 요청 실패');
   return json.data;
@@ -471,11 +471,11 @@ async function geminiProxyCall(payload, actionKey, requestId) {
   var auth = getUserAuth();
   if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  if (!cfg.url) throw new Error('서버 설정 오류(GAS 미설정)');
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS는 OPTIONS(preflight)를 못 받으므로 simple-request로 보냄
-    body: JSON.stringify({ action: 'geminiProxy', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), payload: payload, actionKey: actionKey || '', requestId: requestId || '' })
+    body: JSON.stringify({ action: 'geminiProxy', userId: auth.id, userPw: auth.pw, site: _siteId(), payload: payload, actionKey: actionKey || '', requestId: requestId || '' })
   });
   if (!json.ok) throw new Error(json.error || 'Gemini 요청 실패');
   return json.text;
@@ -486,11 +486,11 @@ async function claudeQuotaCheck() {
   var auth = getUserAuth();
   if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  if (!cfg.url) throw new Error('서버 설정 오류(GAS 미설정)');
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS는 OPTIONS(preflight)를 못 받으므로 simple-request로 보냄
-    body: JSON.stringify({ action: 'quotaStatus', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId() })
+    body: JSON.stringify({ action: 'quotaStatus', userId: auth.id, userPw: auth.pw, site: _siteId() })
   });
   if (!json.ok) throw new Error(json.error || '사용량 확인 실패');
   return json; // { count, limit, remaining }
@@ -502,11 +502,11 @@ async function useCredit(actionKey) {
   var auth = getUserAuth();
   if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  if (!cfg.url) throw new Error('서버 설정 오류(GAS 미설정)');
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'useCredit', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), actionKey: actionKey })
+    body: JSON.stringify({ action: 'useCredit', userId: auth.id, userPw: auth.pw, site: _siteId(), actionKey: actionKey })
   });
   if (!json.ok) throw new Error(json.error || '크레딧 사용에 실패했습니다.');
   if (typeof creditUpdateBadge === 'function') creditUpdateBadge();
@@ -518,11 +518,11 @@ async function getCreditQuote(actionKey) {
   var auth = getUserAuth();
   if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  if (!cfg.url) throw new Error('서버 설정 오류(GAS 미설정)');
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'creditQuote', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), actionKey: actionKey })
+    body: JSON.stringify({ action: 'creditQuote', userId: auth.id, userPw: auth.pw, site: _siteId(), actionKey: actionKey })
   });
   if (!json.ok) throw new Error(json.error || '크레딧 확인에 실패했습니다.');
   return json;
@@ -597,11 +597,11 @@ async function getCreditStatus() {
   var auth = getUserAuth();
   if (!auth) return null;
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) return null;
+  if (!cfg.url) return null;
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'creditStatus', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId() })
+    body: JSON.stringify({ action: 'creditStatus', userId: auth.id, userPw: auth.pw, site: _siteId() })
   });
   return json.ok ? json : null;
 }
@@ -611,12 +611,12 @@ async function getCreditHistory(n) {
   var auth = getUserAuth();
   if (!auth) return [];
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) return [];
+  if (!cfg.url) return [];
   try {
     var json = await _fetchGasJson(cfg.url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'creditHistory', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), n: n || 50 })
+      body: JSON.stringify({ action: 'creditHistory', userId: auth.id, userPw: auth.pw, site: _siteId(), n: n || 50 })
     });
     return json.ok ? (json.items || []) : [];
   } catch (e) { return []; }
@@ -627,11 +627,11 @@ async function gasGetMyPosts(n) {
   var auth = getUserAuth();
   if (!auth) return [];
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) return [];
+  if (!cfg.url) return [];
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS는 OPTIONS(preflight)를 못 받으므로 simple-request로 보냄
-    body: JSON.stringify({ action: 'myPosts', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), n: n || 100 })
+    body: JSON.stringify({ action: 'myPosts', userId: auth.id, userPw: auth.pw, site: _siteId(), n: n || 100 })
   });
   if (!json.ok) throw new Error(json.error || '히스토리 조회 실패');
   return json.posts || [];
@@ -642,11 +642,11 @@ async function gasFeedbackList() {
   var auth = getUserAuth();
   if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  if (!cfg.url) throw new Error('서버 설정 오류(GAS 미설정)');
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS는 OPTIONS(preflight)를 못 받으므로 simple-request로 보냄
-    body: JSON.stringify({ action: 'feedbackList', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId() })
+    body: JSON.stringify({ action: 'feedbackList', userId: auth.id, userPw: auth.pw, site: _siteId() })
   });
   if (!json.ok) throw new Error(json.error || '문의 목록 조회 실패');
   return json.threads || [];
@@ -656,11 +656,11 @@ async function gasFeedbackPost(content) {
   var auth = getUserAuth();
   if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  if (!cfg.url) throw new Error('서버 설정 오류(GAS 미설정)');
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS는 OPTIONS(preflight)를 못 받으므로 simple-request로 보냄
-    body: JSON.stringify({ action: 'feedbackPost', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), content: content })
+    body: JSON.stringify({ action: 'feedbackPost', userId: auth.id, userPw: auth.pw, site: _siteId(), content: content })
   });
   if (!json.ok) throw new Error(json.error || '등록 실패');
   return json.threadId;
@@ -670,11 +670,11 @@ async function gasFeedbackReply(threadId, content) {
   var auth = getUserAuth();
   if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  if (!cfg.url) throw new Error('서버 설정 오류(GAS 미설정)');
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS는 OPTIONS(preflight)를 못 받으므로 simple-request로 보냄
-    body: JSON.stringify({ action: 'feedbackReply', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), threadId: threadId, content: content })
+    body: JSON.stringify({ action: 'feedbackReply', userId: auth.id, userPw: auth.pw, site: _siteId(), threadId: threadId, content: content })
   });
   if (!json.ok) throw new Error(json.error || '답변 등록 실패');
 }
@@ -684,8 +684,8 @@ async function _adminCall(action, extra) {
   var auth = getUserAuth();
   if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류');
-  var body = Object.assign({ action: action, token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId() }, extra || {});
+  if (!cfg.url) throw new Error('서버 설정 오류');
+  var body = Object.assign({ action: action, userId: auth.id, userPw: auth.pw, site: _siteId() }, extra || {});
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -735,12 +735,12 @@ async function getAnnouncements() {
   var auth = getUserAuth();
   if (!auth) return [];
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) return [];
+  if (!cfg.url) return [];
   try {
     var json = await _fetchGasJson(cfg.url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'getAnnouncements', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId() })
+      body: JSON.stringify({ action: 'getAnnouncements', userId: auth.id, userPw: auth.pw, site: _siteId() })
     });
     return json.ok ? (json.items || []) : [];
   } catch (e) { return []; }
@@ -856,8 +856,7 @@ function settingsTab(tab) {
 function getGasConfig() {
   var gas = (typeof ADMIN_GAS !== 'undefined') ? ADMIN_GAS : {};
   return {
-    url:   (gas.url   && gas.url.trim())   ? gas.url.trim()   : (localStorage.getItem('mtt_gas_url')   || ''),
-    token: (gas.token && gas.token.trim()) ? gas.token.trim() : (localStorage.getItem('mtt_gas_token') || '')
+    url: (gas.url && gas.url.trim()) ? gas.url.trim() : (localStorage.getItem('mtt_gas_url') || '')
   };
 }
 
@@ -865,8 +864,7 @@ function getGasConfig() {
 function getMapsearchGasConfig() {
   var gas = (typeof ADMIN_GAS_MAPSEARCH !== 'undefined') ? ADMIN_GAS_MAPSEARCH : {};
   return {
-    url:   (gas.url   && gas.url.trim())   ? gas.url.trim()   : (localStorage.getItem('mtt_gas_url_mapsearch')   || ''),
-    token: (gas.token && gas.token.trim()) ? gas.token.trim() : (localStorage.getItem('mtt_gas_token_mapsearch') || '')
+    url: (gas.url && gas.url.trim()) ? gas.url.trim() : (localStorage.getItem('mtt_gas_url_mapsearch') || '')
   };
 }
 
@@ -874,8 +872,7 @@ function getMapsearchGasConfig() {
 function getNewsGasConfig() {
   var gas = (typeof ADMIN_GAS_NEWS !== 'undefined') ? ADMIN_GAS_NEWS : {};
   return {
-    url:   (gas.url   && gas.url.trim())   ? gas.url.trim()   : (localStorage.getItem('mtt_gas_url_news')   || ''),
-    token: (gas.token && gas.token.trim()) ? gas.token.trim() : (localStorage.getItem('mtt_gas_token_news') || '')
+    url: (gas.url && gas.url.trim()) ? gas.url.trim() : (localStorage.getItem('mtt_gas_url_news') || '')
   };
 }
 
@@ -883,17 +880,15 @@ function getNewsGasConfig() {
 function getMonitorGasConfig() {
   var gas = (typeof ADMIN_GAS_MONITOR !== 'undefined') ? ADMIN_GAS_MONITOR : {};
   return {
-    url:   (gas.url   && gas.url.trim())   ? gas.url.trim()   : (localStorage.getItem('mtt_gas_url_monitor')   || ''),
-    token: (gas.token && gas.token.trim()) ? gas.token.trim() : (localStorage.getItem('mtt_gas_token_monitor') || '')
+    url: (gas.url && gas.url.trim()) ? gas.url.trim() : (localStorage.getItem('mtt_gas_url_monitor') || '')
   };
 }
 
 async function gasSavePost(data) {
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) return;
+  if (!cfg.url) return;
   var auth = getUserAuth();
   var payload = {
-    token:     cfg.token,
     action:    'save',
     type:      data.type      || '',
     mood:      data.mood      || '',
@@ -926,9 +921,9 @@ async function gasSavePost(data) {
 
 async function gasGetRecentPosts(n) {
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) return [];
+  if (!cfg.url) return [];
   try {
-    var url = cfg.url + '?action=get&token=' + encodeURIComponent(cfg.token) + '&n=' + (n || 20);
+    var url = cfg.url + '?action=get&n=' + (n || 20);
     var res = await fetch(url);
     var json = await res.json();
     return json.posts || [];
@@ -939,10 +934,10 @@ async function gasGetRecentPosts(n) {
 // GAS 미설정/실패/네이버 블로그가 아닌 경우 null 반환 — 호출부에서 조용히 폴백 처리
 async function gasFetchNaverBlogContent(url) {
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) return null;
+  if (!cfg.url) return null;
   if (!/blog\.naver\.com/.test(url)) return null;
   try {
-    var reqUrl = cfg.url + '?action=fetchNaverBlog&token=' + encodeURIComponent(cfg.token) + '&url=' + encodeURIComponent(url);
+    var reqUrl = cfg.url + '?action=fetchNaverBlog&url=' + encodeURIComponent(url);
     var res = await fetch(reqUrl);
     var json = await res.json();
     return (json && json.ok && json.content) ? json.content : null;
@@ -996,11 +991,11 @@ async function gasMyProfile() {
   var auth = getUserAuth();
   if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  if (!cfg.url) throw new Error('서버 설정 오류(GAS 미설정)');
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'myProfile', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId() })
+    body: JSON.stringify({ action: 'myProfile', userId: auth.id, userPw: auth.pw, site: _siteId() })
   });
   if (!json.ok) throw new Error(json.error || '내 정보 조회에 실패했습니다.');
   return json;
@@ -1010,11 +1005,11 @@ async function gasChangePassword(oldPw, newPw) {
   var auth = getUserAuth();
   if (!auth) { showLoginOverlay(); throw new Error('로그인이 필요합니다.'); }
   var cfg = getGasConfig();
-  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
+  if (!cfg.url) throw new Error('서버 설정 오류(GAS 미설정)');
   var json = await _fetchGasJson(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'changePassword', token: cfg.token, userId: auth.id, userPw: auth.pw, site: _siteId(), oldPw: oldPw, newPw: newPw })
+    body: JSON.stringify({ action: 'changePassword', userId: auth.id, userPw: auth.pw, site: _siteId(), oldPw: oldPw, newPw: newPw })
   });
   if (!json.ok) throw new Error(json.error || '비밀번호 변경에 실패했습니다.');
 }

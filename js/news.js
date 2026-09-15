@@ -95,8 +95,8 @@ function buildRegionTopicReduceSystem() {
 
 async function newsFetchEducationNews() {
   var cfg = (typeof getNewsGasConfig === 'function') ? getNewsGasConfig() : { url: '', token: '' };
-  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
-  var url = cfg.url + '?action=getEducationNews&token=' + encodeURIComponent(cfg.token);
+  if (!cfg.url) throw new Error('서버 설정 오류(GAS 미설정)');
+  var url = cfg.url + '?action=getEducationNews';
   var res = await fetch(url);
   var json = await res.json();
   if (json.error) throw new Error(json.error);
