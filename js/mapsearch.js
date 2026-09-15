@@ -80,31 +80,39 @@ function msRadiusLabel(r) {
   return r >= 1000 ? (r / 1000) + 'km' : r + 'm';
 }
 
-async function msKakaoFetch(url) {
-  var key = getKakaoKey();
-  if (!key) throw new Error('NO_KEY');
-  var res = await fetch(url, { headers: { Authorization: 'KakaoAK ' + key } });
-  if (!res.ok) {
-    var bodyText = await res.text().catch(function() { return '(응답 본문 읽기 실패)'; });
-    console.error('[지도검색] 카카오 API 실패', res.status, url, bodyText);
-    throw new Error('HTTP_' + res.status);
-  }
-  return res.json();
+// 카카오 REST API 키(도메인 제한 불가, config.js에 평문 노출)를 브라우저에서 직접 쓰던 방식을
+// 2026-09-15부로 폐기하고, 카카오맵 JavaScript SDK(JS 키, Web 플랫폼 도메인 등록으로 보호 가능)로 전환.
+var msKakaoSdkPromise = null;
+function msLoadKakaoSdk() {
+  if (msKakaoSdkPromise) return msKakaoSdkPromise;
+  msKakaoSdkPromise = new Promise(function(resolve, reject) {
+    var key = getKakaoKey();
+    if (!key) { msKakaoSdkPromise = null; reject(new Error('NO_KEY')); return; }
+    if (window.kakao && window.kakao.maps && window.kakao.maps.services) { resolve(); return; }
+    var script = document.createElement('script');
+    script.src = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=' + encodeURIComponent(key) + '&libraries=services&autoload=false';
+    script.onload = function() { window.kakao.maps.load(function() { resolve(); }); };
+    script.onerror = function() { msKakaoSdkPromise = null; reject(new Error('SDK_LOAD_FAIL')); };
+    document.head.appendChild(script);
+  });
+  return msKakaoSdkPromise;
 }
 
 // 주소 → 좌표. 지번/도로명 주소 검색 실패 시 키워드 검색(장소명 등)으로 한 번 더 시도
 async function msGeocode(address) {
-  var addrJson = await msKakaoFetch('https://dapi.kakao.com/v2/local/search/address.json?query=' + encodeURIComponent(address));
-  if (addrJson.documents && addrJson.documents.length) {
-    var d = addrJson.documents[0];
-    return { x: d.x, y: d.y };
-  }
-  var kwJson = await msKakaoFetch('https://dapi.kakao.com/v2/local/search/keyword.json?query=' + encodeURIComponent(address));
-  if (kwJson.documents && kwJson.documents.length) {
-    var k = kwJson.documents[0];
-    return { x: k.x, y: k.y };
-  }
-  throw new Error('NO_MATCH');
+  await msLoadKakaoSdk();
+  return new Promise(function(resolve, reject) {
+    new kakao.maps.services.Geocoder().addressSearch(address, function(result, status) {
+      if (status === kakao.maps.services.Status.OK && result.length) {
+        resolve({ x: result[0].x, y: result[0].y });
+        return;
+      }
+      new kakao.maps.services.Places().keywordSearch(address, function(data, status2) {
+        if (status2 === kakao.maps.services.Status.OK && data.length) resolve({ x: data[0].x, y: data[0].y });
+        else reject(new Error('NO_MATCH'));
+      });
+    });
+  });
 }
 
 // 카카오 키워드검색은 size·page 조합과 무관하게 총 45건이 하드 캡(카카오 공식 답변) —
@@ -113,29 +121,33 @@ var MS_MAX_RESULTS = 45;
 var MS_PAGE_SIZE = 15;
 
 async function msKeywordSearch(x, y, radius, keyword) {
-  var all = [];
-  var maxPages = Math.ceil(MS_MAX_RESULTS / MS_PAGE_SIZE);
-  for (var page = 1; page <= maxPages; page++) {
-    var url = 'https://dapi.kakao.com/v2/local/search/keyword.json'
-      + '?query=' + encodeURIComponent(keyword)
-      + '&x=' + x + '&y=' + y + '&radius=' + radius
-      + '&category_group_code=AC5&sort=distance&size=' + MS_PAGE_SIZE + '&page=' + page;
-    var json = await msKakaoFetch(url);
-    var docs = json.documents || [];
-    all = all.concat(docs.map(function(d) {
-      return {
-        name: d.place_name,
-        address: d.road_address_name || d.address_name,
-        category: d.category_name,
-        distance: parseInt(d.distance, 10) || 0,
-        link: d.place_url,
-        x: d.x,
-        y: d.y
-      };
-    }));
-    if (!json.meta || json.meta.is_end || docs.length < MS_PAGE_SIZE) break;
-  }
-  return all.slice(0, MS_MAX_RESULTS);
+  await msLoadKakaoSdk();
+  var places = new kakao.maps.services.Places();
+  var loc = new kakao.maps.LatLng(y, x);
+  return new Promise(function(resolve, reject) {
+    var all = [];
+    function handlePage(data, status, pagination) {
+      if (status === kakao.maps.services.Status.ZERO_RESULT) { resolve(all); return; }
+      if (status !== kakao.maps.services.Status.OK) { reject(new Error('SEARCH_FAIL')); return; }
+      all = all.concat(data.map(function(d) {
+        return {
+          name: d.place_name,
+          address: d.road_address_name || d.address_name,
+          category: d.category_name,
+          distance: parseInt(d.distance, 10) || 0,
+          link: d.place_url,
+          x: d.x,
+          y: d.y
+        };
+      }));
+      if (pagination.hasNextPage && all.length < MS_MAX_RESULTS) pagination.nextPage();
+      else resolve(all.slice(0, MS_MAX_RESULTS));
+    }
+    places.keywordSearch(keyword, handlePage, {
+      location: loc, radius: radius, category_group_code: 'AC5',
+      sort: kakao.maps.services.SortBy.DISTANCE, size: MS_PAGE_SIZE
+    });
+  });
 }
 
 async function msSearch() {
@@ -149,8 +161,8 @@ async function msSearch() {
     return;
   }
   if (!getKakaoKey()) {
-    if (countEl) countEl.textContent = '카카오 REST API 키가 설정되지 않았습니다';
-    if (wrap) wrap.innerHTML = '<div class="mon-empty-right" style="grid-column:1/-1;">설정 → 지도검색 연동에서 카카오 REST API 키를 먼저 입력해주세요</div>';
+    if (countEl) countEl.textContent = '카카오맵 키가 설정되지 않았습니다';
+    if (wrap) wrap.innerHTML = '<div class="mon-empty-right" style="grid-column:1/-1;">설정 → 지도검색 연동에서 카카오맵 키를 먼저 입력해주세요</div>';
     return;
   }
 
@@ -180,11 +192,11 @@ async function msSearch() {
   } catch (e) {
     msState.results = [];
     var msg = '검색 중 오류가 발생했습니다.';
-    if (e.message === 'NO_KEY') msg = '카카오 REST API 키가 설정되지 않았습니다.';
+    if (e.message === 'NO_KEY') msg = '카카오맵 키가 설정되지 않았습니다.';
     else if (e.message === 'NO_MATCH') msg = '"' + address + '" 위치를 찾을 수 없습니다. 학원 프로필의 학원명·지도 링크를 확인해주세요.';
-    else if (e.message && e.message.indexOf('HTTP_401') !== -1) msg = 'API 키가 유효하지 않습니다 (401).';
-    else if (e.message && e.message.indexOf('HTTP_') !== -1) msg = '카카오 API 호출 실패 (' + e.message + ')';
-    else msg = 'CORS 또는 네트워크 오류로 호출에 실패했습니다. 카카오 디벨로퍼스에서 Web 플랫폼 도메인 등록을 확인해주세요.';
+    else if (e.message === 'SDK_LOAD_FAIL') msg = '카카오맵을 불러오지 못했습니다. 카카오 디벨로퍼스에서 이 사이트 도메인이 Web 플랫폼에 등록되어 있는지 확인해주세요.';
+    else if (e.message === 'SEARCH_FAIL') msg = '카카오맵 검색에 실패했습니다.';
+    else msg = '알 수 없는 오류로 호출에 실패했습니다.';
     if (countEl) countEl.textContent = msg;
     if (wrap) wrap.innerHTML = '<div class="mon-empty-right" style="grid-column:1/-1;">' + msEsc(msg) + '</div>';
   } finally {
