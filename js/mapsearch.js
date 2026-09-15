@@ -247,7 +247,7 @@ async function msRequestAcademyPosts(placeId, cfg) {
   try {
     var res = await fetch(cfg.url, {
       method: 'POST',
-      body: JSON.stringify({ token: cfg.token, action: 'searchAcademyPosts', placeId: placeId })
+      body: JSON.stringify({ action: 'searchAcademyPosts', placeId: placeId })
     });
     var rawText = await res.text();
     var json;
@@ -270,7 +270,7 @@ async function msRequestAcademyPosts(placeId, cfg) {
 // 실패(네트워크 오류 등)한 경우는 판단 불가로 보고 활성 상태로 둔다(오탐으로 기능을 막지 않기 위해).
 async function msRunBlogChecks() {
   var cfg = (typeof getMapsearchGasConfig === 'function') ? getMapsearchGasConfig() : { url: '', token: '' };
-  if (!cfg.url || !cfg.token) return;
+  if (!cfg.url) return;
 
   var queue = msState.results.map(function(a, i) { return i; });
   var workers = [];
@@ -332,7 +332,7 @@ async function msFetchPosts(idx) {
     bodyEl.innerHTML = '<div class="hint-text">카카오맵 장소 정보를 찾을 수 없습니다</div>';
     return;
   }
-  if (!cfg.url || !cfg.token) {
+  if (!cfg.url) {
     bodyEl.innerHTML = '<div class="hint-text">설정 → AI 설정에서 구글시트 연동(GAS URL·토큰)을 먼저 설정해주세요</div>';
     return;
   }

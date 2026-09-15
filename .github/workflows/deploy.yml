@@ -33,21 +33,17 @@ jobs:
           ref: beta
           path: beta-src
 
-      - name: Create config.js (dev + beta 공통 — Worker/카카오 키)
+      - name: Create config.js (dev + beta 공통 — Worker 주소/카카오 키. 2026-09-15부터 토큰 없음 — Worker가 Origin으로 검증)
         env:
           BLOG_WORKER_URL: ${{ secrets.BLOG_WORKER_URL }}
-          BLOG_WORKER_TOKEN: ${{ secrets.BLOG_WORKER_TOKEN }}
           MAPSEARCH_WORKER_URL: ${{ secrets.MAPSEARCH_WORKER_URL }}
-          MAPSEARCH_WORKER_TOKEN: ${{ secrets.MAPSEARCH_WORKER_TOKEN }}
           NEWS_WORKER_URL: ${{ secrets.NEWS_WORKER_URL }}
-          NEWS_WORKER_TOKEN: ${{ secrets.NEWS_WORKER_TOKEN }}
           MONITOR_WORKER_URL: ${{ secrets.MONITOR_WORKER_URL }}
-          MONITOR_WORKER_TOKEN: ${{ secrets.MONITOR_WORKER_TOKEN }}
           KAKAO_KEY: ${{ secrets.KAKAO_KEY }}
         run: |
           for dir in dev-src beta-src; do
-            printf 'var ADMIN_GAS = { url: "%s", token: "%s" };\nvar ADMIN_GAS_MAPSEARCH = { url: "%s", token: "%s" };\nvar ADMIN_GAS_NEWS = { url: "%s", token: "%s" };\nvar ADMIN_GAS_MONITOR = { url: "%s", token: "%s" };\nvar ADMIN_KAKAO_KEY = "%s";\n' \
-              "${BLOG_WORKER_URL}" "${BLOG_WORKER_TOKEN}" "${MAPSEARCH_WORKER_URL}" "${MAPSEARCH_WORKER_TOKEN}" "${NEWS_WORKER_URL}" "${NEWS_WORKER_TOKEN}" "${MONITOR_WORKER_URL}" "${MONITOR_WORKER_TOKEN}" "${KAKAO_KEY}" > "$dir/config.js"
+            printf 'var ADMIN_GAS = { url: "%s" };\nvar ADMIN_GAS_MAPSEARCH = { url: "%s" };\nvar ADMIN_GAS_NEWS = { url: "%s" };\nvar ADMIN_GAS_MONITOR = { url: "%s" };\nvar ADMIN_KAKAO_KEY = "%s";\n' \
+              "${BLOG_WORKER_URL}" "${MAPSEARCH_WORKER_URL}" "${NEWS_WORKER_URL}" "${MONITOR_WORKER_URL}" "${KAKAO_KEY}" > "$dir/config.js"
           done
 
       - name: Create flags.js (dev — 기본값 그대로, 전부 켜짐)
