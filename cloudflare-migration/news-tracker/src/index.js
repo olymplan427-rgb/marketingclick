@@ -9,6 +9,23 @@ function jsonResponse(data, status = 200) {
   });
 }
 
+// 정적 토큰(SHARED_TOKEN) 폐기, Origin/Referer 검증으로 대체 — blog-tracker와 동일한 이유(2026-09-15)
+const ALLOWED_ORIGINS = [
+  'https://olymplan427-rgb.github.io',
+  'https://marketing.clicky.kr',
+  'http://localhost:8787'
+];
+function getRequestOrigin(request) {
+  const origin = request.headers.get('Origin');
+  if (origin) return origin;
+  const referer = request.headers.get('Referer');
+  if (referer) { try { return new URL(referer).origin; } catch (e) {} }
+  return '';
+}
+function isAllowedOrigin(request) {
+  return ALLOWED_ORIGINS.includes(getRequestOrigin(request));
+}
+
 const NEWS_QUERIES = [
   '수학교육', '입시정책', '선행학습', '고교학점제', '내신',
   '수능', '자사고', '특목고', '영재학교', '과학고',
@@ -133,9 +150,9 @@ export default {
         }
       });
     }
+    if (!isAllowedOrigin(request)) return jsonResponse({ error: 'Forbidden origin' }, 403);
     const url = new URL(request.url);
     const p = url.searchParams;
-    if (p.get('token') !== env.SHARED_TOKEN) return jsonResponse({ error: 'Unauthorized' }, 401);
     const action = p.get('action') || '';
     if (action === 'getEducationNews') return jsonResponse(await getEducationNews(env));
     if (action === 'regionAcademyBlogs') return jsonResponse(await searchRegionAcademyBlogs(env, p.get('region') || ''));

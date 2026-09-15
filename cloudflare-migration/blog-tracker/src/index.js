@@ -36,6 +36,27 @@ const AI_MODEL_CATALOG = {
   openai: ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna']
 };
 
+// ── 정적 토큰(SHARED_TOKEN, 클라이언트 config.js에 평문 노출) 폐기(2026-09-15) ──
+// 클라이언트가 매 요청 전송해야 하는 값은 브라우저 네트워크탭으로 원천적으로 숨길 수 없어 보안
+// 기능이 없었음(사용자 확인). 대신 요청의 Origin/Referer가 실제 배포 도메인인지 검증하는 방식으로 대체.
+// 실제 데이터 보호는 이미 매 요청 아이디/비밀번호 서버 검증(verifyUser)이 담당하고 있어 이 변경이
+// 보안을 낮추지 않음 — 이 체크는 "우리 화면을 거치지 않은 임의 호출"을 걸러내는 최소 문턱일 뿐.
+const ALLOWED_ORIGINS = [
+  'https://olymplan427-rgb.github.io',
+  'https://marketing.clicky.kr',
+  'http://localhost:8787'
+];
+function getRequestOrigin(request) {
+  const origin = request.headers.get('Origin');
+  if (origin) return origin;
+  const referer = request.headers.get('Referer');
+  if (referer) { try { return new URL(referer).origin; } catch (e) {} }
+  return '';
+}
+function isAllowedOrigin(request) {
+  return ALLOWED_ORIGINS.includes(getRequestOrigin(request));
+}
+
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -1214,11 +1235,12 @@ export default {
       });
     }
 
+    if (!isAllowedOrigin(request)) return jsonResponse({ error: 'Forbidden origin' }, 403);
+
     try {
       if (request.method === 'GET') {
         const url = new URL(request.url);
         const p = url.searchParams;
-        if (p.get('token') !== env.SHARED_TOKEN) return jsonResponse({ error: 'Unauthorized' }, 401);
         const action = p.get('action') || 'get';
         if (action === 'fetchNaverBlog') return jsonResponse(await fetchNaverBlogContent(p.get('url') || ''));
 
@@ -1234,12 +1256,10 @@ export default {
       const data = await request.json();
 
       if (data.action === 'register') {
-        if (data.token !== env.SHARED_TOKEN) return jsonResponse({ ok: false, error: 'Unauthorized' });
         return jsonResponse(await registerUser(env, data.userId, data.userPw, data.name || '', data.academy || '', data.site));
       }
 
       if (AUTHED_ACTIONS.includes(data.action)) {
-        if (data.token !== env.SHARED_TOKEN) return jsonResponse({ ok: false, error: 'Unauthorized' });
         const v = await verifyUser(env, data.userId, data.userPw, data.site);
         if (!v.valid) return jsonResponse({ ok: false, error: v.error });
         if (ADMIN_ACTIONS.includes(data.action) && String(v.role) !== '관리자') {
@@ -1287,7 +1307,6 @@ export default {
         if (data.action === 'changePassword') return jsonResponse(await changePassword(env, data.userId, data.oldPw || '', data.newPw || ''));
       }
 
-      if (data.token !== env.SHARED_TOKEN) return jsonResponse({ error: 'Unauthorized' });
       return jsonResponse(await savePost(env, data));
     } catch (err) {
       return jsonResponse({ error: err.message }, 500);

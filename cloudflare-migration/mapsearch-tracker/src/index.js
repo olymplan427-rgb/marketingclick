@@ -9,6 +9,23 @@ function jsonResponse(data, status = 200) {
   });
 }
 
+// 정적 토큰(SHARED_TOKEN) 폐기, Origin/Referer 검증으로 대체 — blog-tracker와 동일한 이유(2026-09-15)
+const ALLOWED_ORIGINS = [
+  'https://olymplan427-rgb.github.io',
+  'https://marketing.clicky.kr',
+  'http://localhost:8787'
+];
+function getRequestOrigin(request) {
+  const origin = request.headers.get('Origin');
+  if (origin) return origin;
+  const referer = request.headers.get('Referer');
+  if (referer) { try { return new URL(referer).origin; } catch (e) {} }
+  return '';
+}
+function isAllowedOrigin(request) {
+  return ALLOWED_ORIGINS.includes(getRequestOrigin(request));
+}
+
 // 카카오맵 장소 상세페이지("블로그 리뷰" 탭)가 내부적으로 쓰는 비공식 API — 공식 문서화된
 // API가 아니므로 카카오 쪽에서 예고 없이 스펙을 바꾸거나 막을 수 있음(gas 버전과 동일한 주의사항).
 async function searchAcademyPosts(placeId) {
@@ -52,9 +69,9 @@ export default {
         }
       });
     }
+    if (!isAllowedOrigin(request)) return jsonResponse({ error: 'Forbidden origin' }, 403);
     try {
       const data = await request.json();
-      if (data.token !== env.SHARED_TOKEN) return jsonResponse({ ok: false, error: 'Unauthorized' });
       if (data.action === 'searchAcademyPosts') return jsonResponse(await searchAcademyPosts(data.placeId || ''));
       return jsonResponse({ ok: false, error: '알 수 없는 action' });
     } catch (err) {
