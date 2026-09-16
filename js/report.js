@@ -88,9 +88,9 @@ function reportInit() {
 }
 
 async function reportFetchRegionBlogs(region) {
-  var cfg = (typeof getNewsGasConfig === 'function') ? getNewsGasConfig() : { url: '', token: '' };
-  if (!cfg.url || !cfg.token) throw new Error('서버 설정 오류(GAS 미설정)');
-  var url = cfg.url + '?action=regionAcademyBlogs&token=' + encodeURIComponent(cfg.token) + '&region=' + encodeURIComponent(region);
+  var cfg = (typeof getNewsGasConfig === 'function') ? getNewsGasConfig() : { url: '' };
+  if (!cfg.url) throw new Error('서버 설정 오류(GAS 미설정)');
+  var url = cfg.url + '?action=regionAcademyBlogs&region=' + encodeURIComponent(region);
   var res = await fetch(url);
   var json = await res.json();
   if (json.error) throw new Error(json.error);
